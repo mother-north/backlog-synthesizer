@@ -6,9 +6,8 @@ import {
   ReloadOutlined,
   WarningOutlined,
   SearchOutlined,
-  DownOutlined,
-  RightOutlined,
   EyeOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi, dataApi } from '../services/api';
@@ -136,7 +135,7 @@ export default function MeetingView() {
     window.history.replaceState(null, '', `#${tab}`);
   };
   const [expandedStory, setExpandedStory] = useState<number | null>(null);
-  const [collapsedEpics, setCollapsedEpics] = useState<Set<number>>(new Set());
+  // collapsedEpics removed — stories now in table
 
   // Checks tab filters
   const [checkStatusFilter, setCheckStatusFilter] = useState<string>('all');
@@ -230,13 +229,7 @@ export default function MeetingView() {
     checks: checks.filter(c => c.story_id === story.id),
   }));
 
-  // Group stories by epic
-  const storiesByEpic = storiesWithChecks.reduce<Record<number | string, Story[]>>((acc, story) => {
-    const key = story.epic_id || 'orphan';
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(story);
-    return acc;
-  }, {});
+  // storiesByEpic removed — stories now in flat table with Epic column
 
   const proposedEpics = epics.filter(e => e.is_proposed);
   const existingEpics = epics.filter(e => !e.is_proposed);
@@ -559,76 +552,118 @@ export default function MeetingView() {
                   />
                 ))}
 
-                {/* Stories grouped by epic */}
-                {stories.length === 0 ? (
+                {/* Stories table grouped by epic */}
+                {storiesWithChecks.length === 0 ? (
                   <Empty description={isProcessing ? "Stories will appear after processing completes" : "No stories generated for this meeting"} />
                 ) : (
-                  <>
-                    {/* Existing epics with stories */}
-                    {epics.filter(e => storiesByEpic[e.id]).map(epic => (
-                      <div key={epic.id} className="bs-epic-section">
-                        <div
-                          className={`bs-epic-header${epic.is_proposed ? ' proposed' : ''}`}
-                          onClick={() => {
-                            setCollapsedEpics(prev => {
-                              const next = new Set(prev);
-                              next.has(epic.id) ? next.delete(epic.id) : next.add(epic.id);
-                              return next;
-                            });
-                          }}
-                        >
-                          {collapsedEpics.has(epic.id) ? <RightOutlined /> : <DownOutlined />}
-                          <span>Epic: {epic.title}</span>
-                          {epic.external_id && <Tag>{epic.external_id}</Tag>}
-                          {epic.is_proposed && <Tag color="orange">Proposed</Tag>}
-                          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 400, color: 'var(--text-sec)' }}>
-                            {storiesByEpic[epic.id]?.length || 0} stories
+                  <Table
+                    dataSource={storiesWithChecks}
+                    rowKey="id"
+                    size="middle"
+                    pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} stories` }}
+                    expandable={{
+                      expandedRowRender: (story) => (
+                        <StoryCard
+                          story={story}
+                          epics={epics}
+                          expanded={true}
+                          onToggle={() => {}}
+                          onUpdate={fetchData}
+                          userRoles={userRoles}
+                        />
+                      ),
+                      expandedRowKeys: expandedStory ? [expandedStory] : [],
+                      onExpand: (expanded, record) => setExpandedStory(expanded ? record.id : null),
+                    }}
+                    columns={[
+                      {
+                        title: 'ID',
+                        dataIndex: 'id',
+                        key: 'id',
+                        width: 60,
+                        sorter: (a, b) => a.id - b.id,
+                        render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)' }}>{id}</span>,
+                      },
+                      {
+                        title: 'Title',
+                        dataIndex: 'title',
+                        key: 'title',
+                        ellipsis: true,
+                        sorter: (a, b) => (a.title || '').localeCompare(b.title || ''),
+                        render: (title: string) => <span style={{ fontWeight: 500 }}>{title}</span>,
+                      },
+                      {
+                        title: 'Type',
+                        dataIndex: 'type',
+                        key: 'type',
+                        width: 100,
+                        filters: Array.from(new Set(storiesWithChecks.map(s => s.type))).filter(Boolean).map(v => ({ text: v, value: v })),
+                        onFilter: (value, record) => record.type === value,
+                        render: (type: string) => <Tag color={type === 'feature' ? 'blue' : type === 'bug' ? 'red' : type === 'nfr' ? 'purple' : type === 'improvement' ? 'green' : 'default'}>{type}</Tag>,
+                      },
+                      {
+                        title: 'Epic',
+                        key: 'epic',
+                        width: 160,
+                        filters: [
+                          ...epics.map(e => ({ text: e.title, value: e.id })),
+                          { text: 'No Epic', value: 0 },
+                        ],
+                        onFilter: (value, record) => value === 0 ? !record.epic_id : record.epic_id === value,
+                        render: (_: unknown, record: any) => {
+                          const epic = epics.find(e => e.id === record.epic_id);
+                          return epic ? (
+                            <span style={{ fontSize: 12 }}>{epic.external_id || epic.title}</span>
+                          ) : (
+                            <Tag color="error">No Epic</Tag>
+                          );
+                        },
+                      },
+                      {
+                        title: 'Confidence',
+                        dataIndex: 'confidence',
+                        key: 'confidence',
+                        width: 100,
+                        filters: [{ text: 'high', value: 'high' }, { text: 'medium', value: 'medium' }, { text: 'low', value: 'low' }],
+                        onFilter: (value, record) => record.confidence === value,
+                        render: (conf: string) => (
+                          <Tag color={conf === 'high' ? 'green' : conf === 'medium' ? 'orange' : 'red'}>{conf}</Tag>
+                        ),
+                      },
+                      {
+                        title: 'Open Checks',
+                        key: 'open_checks',
+                        width: 110,
+                        sorter: (a, b) => (a.checks?.filter((c: any) => c.status === 'open').length || 0) - (b.checks?.filter((c: any) => c.status === 'open').length || 0),
+                        render: (_: unknown, record: any) => {
+                          const open = record.checks?.filter((c: any) => c.status === 'open').length || 0;
+                          return open > 0 ? (
+                            <Tag color="warning"><WarningOutlined /> {open}</Tag>
+                          ) : record.checks?.length > 0 ? (
+                            <Tag color="success"><CheckCircleOutlined /> 0</Tag>
+                          ) : (
+                            <span style={{ color: 'var(--gray-400)' }}>—</span>
+                          );
+                        },
+                      },
+                      {
+                        title: 'Status',
+                        dataIndex: 'status',
+                        key: 'status',
+                        width: 130,
+                        filters: Array.from(new Set(storiesWithChecks.map(s => s.status))).filter(Boolean).map(v => ({ text: formatStatus(v), value: v })),
+                        onFilter: (value, record) => record.status === value,
+                        render: (status: string) => (
+                          <span className="status-badge" style={{
+                            background: `${statusColors[status] || 'var(--gray-400)'}20`,
+                            color: statusColors[status] || 'var(--gray-400)',
+                          }}>
+                            {formatStatus(status)}
                           </span>
-                        </div>
-                        {!collapsedEpics.has(epic.id) && (
-                          <div style={{ border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: 8 }}>
-                            {storiesByEpic[epic.id]?.map(story => (
-                              <StoryCard
-                                key={story.id}
-                                story={story}
-                                epics={epics}
-                                expanded={expandedStory === story.id}
-                                onToggle={() => setExpandedStory(expandedStory === story.id ? null : story.id)}
-                                onUpdate={fetchData}
-                                userRoles={userRoles}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    {/* Orphan stories */}
-                    {storiesByEpic['orphan'] && (
-                      <div className="bs-epic-section">
-                        <div className="bs-epic-header" style={{ background: '#fff1f0', borderColor: '#ffccc7', color: '#cf1322' }}>
-                          <WarningOutlined />
-                          <span>No Epic Assigned</span>
-                          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 400 }}>
-                            {storiesByEpic['orphan'].length} stories
-                          </span>
-                        </div>
-                        <div style={{ border: '1px solid #ffccc7', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: 8 }}>
-                          {storiesByEpic['orphan'].map(story => (
-                            <StoryCard
-                              key={story.id}
-                              story={story}
-                              epics={epics}
-                              expanded={expandedStory === story.id}
-                              onToggle={() => setExpandedStory(expandedStory === story.id ? null : story.id)}
-                              onUpdate={fetchData}
-                              userRoles={userRoles}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
+                        ),
+                      },
+                    ]}
+                  />
                 )}
 
                 <ConfirmDialog
