@@ -5,6 +5,30 @@ import { query } from '../config/database.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import OpenAI from 'openai';
+
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI | null {
+  if (!config.openaiApiKey) return null;
+  if (!openaiClient) openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+  return openaiClient;
+}
+
+async function embedMeeting(meetingId: number, title: string, transcript: string): Promise<void> {
+  const client = getOpenAI();
+  if (!client) return;
+  try {
+    const text = `Meeting: ${title}\n\n${transcript.slice(0, 32000)}`;
+    const resp = await client.embeddings.create({ model: 'text-embedding-3-small', input: text });
+    await query(
+      `INSERT INTO kb_embeddings (content_type, content_id, content_text, embedding, metadata)
+       VALUES ('meeting_summary', $1, $2, $3::vector, $4)`,
+      [meetingId, text.slice(0, 2000), JSON.stringify(resp.data[0].embedding), JSON.stringify({ title, meeting_id: meetingId })]
+    );
+  } catch (e) {
+    logger.error(`Failed to embed meeting ${meetingId}:`, e);
+  }
+}
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -83,6 +107,11 @@ router.post('/upload',
          VALUES ('meeting', $1, 'created', $2, $3)`,
         [meeting.id, JSON.stringify({ title, fileName }), req.user!.id]
       );
+
+      // Embed meeting transcript in background
+      embedMeeting(meeting.id, title, transcript)
+        .then(() => logger.info(`Embedded meeting ${meeting.id} into KB`))
+        .catch(e => logger.error('Meeting embedding failed:', e));
 
       res.status(201).json(meeting);
     } catch (error) {

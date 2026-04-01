@@ -2,12 +2,71 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import { query, transaction } from '../config/database.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import OpenAI from 'openai';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 router.use(authenticateToken);
+
+// ── Embedding helper ────────────────────────────────────────
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI | null {
+  if (!config.openaiApiKey) return null;
+  if (!openaiClient) openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+  return openaiClient;
+}
+
+async function embedAndStore(contentType: string, contentId: number, text: string, metadata: Record<string, any> = {}): Promise<void> {
+  const client = getOpenAI();
+  if (!client || !text) return;
+  try {
+    // Truncate to ~8000 tokens worth (~32000 chars)
+    const truncated = text.slice(0, 32000);
+    const resp = await client.embeddings.create({ model: 'text-embedding-3-small', input: truncated });
+    const embedding = resp.data[0].embedding;
+    await query(
+      `INSERT INTO kb_embeddings (content_type, content_id, content_text, embedding, metadata)
+       VALUES ($1, $2, $3, $4::vector, $5)`,
+      [contentType, contentId, truncated, JSON.stringify(embedding), JSON.stringify(metadata)]
+    );
+  } catch (e) {
+    logger.error(`Failed to embed ${contentType}/${contentId}:`, e);
+  }
+}
+
+async function embedBacklogItems(): Promise<number> {
+  // Remove old backlog embeddings
+  await query(`DELETE FROM kb_embeddings WHERE content_type = 'backlog_item'`);
+  const items = await query(`SELECT id, external_id, type, title, description, epic_id, priority FROM backlog_items`);
+  let count = 0;
+  // Batch: embed epics + stories with descriptions (skip items with no meaningful text)
+  for (const item of items.rows) {
+    const text = [item.title, item.description].filter(Boolean).join(': ');
+    if (text.length < 10) continue;
+    await embedAndStore('backlog_item', item.id, text, {
+      external_id: item.external_id, type: item.type, epic_id: item.epic_id, priority: item.priority
+    });
+    count++;
+  }
+  return count;
+}
+
+async function embedArchitectureDoc(docId: number, content: string, fileName: string): Promise<number> {
+  // Remove old architecture embeddings
+  await query(`DELETE FROM kb_embeddings WHERE content_type = 'architecture'`);
+  // Split into sections by headings
+  const sections = content.split(/^(?=##?\s)/m).filter(s => s.trim().length > 50);
+  let count = 0;
+  for (const section of sections) {
+    const title = section.split('\n')[0].replace(/^#+\s*/, '').trim();
+    await embedAndStore('architecture', docId, section.trim(), { title, file_name: fileName });
+    count++;
+  }
+  return count;
+}
 
 // ── Backlog Data ────────────────────────────────────────────
 
@@ -80,6 +139,11 @@ router.post('/backlog/upload', upload.single('file'), async (req: AuthRequest, r
        VALUES ('backlog', 0, 'bulk_upload', $1, $2)`,
       [JSON.stringify({ count: items.length, file: req.file.originalname }), req.user!.id]
     );
+
+    // Embed backlog items in background
+    embedBacklogItems()
+      .then(n => logger.info(`Embedded ${n} backlog items into KB`))
+      .catch(e => logger.error('Backlog embedding failed:', e));
 
     res.json({ inserted: items.length });
   } catch (error) {
@@ -175,6 +239,11 @@ router.post('/architecture/upload', upload.single('file'), async (req: AuthReque
        VALUES ('architecture_doc', $1, 'uploaded', $2, $3)`,
       [result.rows[0].id, JSON.stringify({ fileName, version: newVersion }), req.user!.id]
     );
+
+    // Embed architecture sections in background
+    embedArchitectureDoc(result.rows[0].id, content, fileName)
+      .then(n => logger.info(`Embedded ${n} architecture sections into KB`))
+      .catch(e => logger.error('Architecture embedding failed:', e));
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
