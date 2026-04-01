@@ -35,7 +35,7 @@ export default function BacklogData() {
       if (typeFilter !== 'all') params.type = typeFilter;
       if (search) params.search = search;
       const res = await dataApi.getBacklog(params);
-      setItems(res.data);
+      setItems(res.data?.rows || res.data || []);
     } catch {
       message.error('Failed to load backlog data');
     } finally {

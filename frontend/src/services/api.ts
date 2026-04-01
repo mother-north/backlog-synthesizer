@@ -132,8 +132,8 @@ export const checksApi = {
   getByStory: (storyId: number) => api.get(`/stories/${storyId}/checks`),
   resolve: (id: number, data: { resolution: string; notes?: string }) =>
     api.post(`/checks/${id}/resolve`, data),
-  getActions: () => api.get('/actions'),
-  getActionCount: () => api.get('/actions/count'),
+  getActions: () => api.get('/checks/actions'),
+  getActionCount: () => api.get('/checks/actions/count'),
 };
 
 // --- Epics ---
@@ -195,7 +195,7 @@ export const auditApi = {
 
 // --- Menu Access ---
 export const menuAccessApi = {
-  getMyAccess: () => api.get('/menu-access/my-access'),
+  getMyAccess: () => api.get('/menu-access/me'),
   getAll: () => api.get('/menu-access'),
   getByRole: (roleId: number) => api.get(`/menu-access/role/${roleId}`),
   bulkUpdate: (roleId: number, access: Array<{ menuPath: string; tabName?: string; allowed: boolean }>) =>

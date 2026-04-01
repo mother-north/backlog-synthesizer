@@ -47,7 +47,7 @@ export default function AllStories() {
     if (statusFilter !== 'all') params.status = statusFilter;
     if (typeFilter !== 'all') params.type = typeFilter;
     storiesApi.getAll(params).then(res => {
-      setStories(res.data);
+      setStories(res.data?.rows || res.data || []);
     }).catch(() => {
       message.error('Failed to load stories');
     }).finally(() => setLoading(false));

@@ -37,7 +37,7 @@ export default function MeetingsList() {
     setLoading(true);
     try {
       const res = await meetingsApi.getAll();
-      setMeetings(res.data);
+      setMeetings(res.data?.rows || res.data || []);
     } catch {
       message.error('Failed to load meetings');
     } finally {

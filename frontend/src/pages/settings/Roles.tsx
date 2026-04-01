@@ -22,7 +22,7 @@ export default function Roles() {
     setLoading(true);
     try {
       const res = await rolesApi.getAll();
-      setRoles(res.data);
+      setRoles(res.data?.rows || res.data || []);
     } catch {
       message.error('Failed to load roles');
     } finally {

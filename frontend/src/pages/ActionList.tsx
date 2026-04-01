@@ -47,7 +47,7 @@ export default function ActionList() {
   useEffect(() => {
     setLoading(true);
     checksApi.getActions().then(res => {
-      setActions(res.data);
+      setActions(res.data?.rows || res.data || []);
     }).catch(() => {
       message.error('Failed to load actions');
     }).finally(() => setLoading(false));

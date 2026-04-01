@@ -30,7 +30,7 @@ export default function AccessControl() {
 
   useEffect(() => {
     rolesApi.getAll().then(res => {
-      setRoles(res.data);
+      setRoles(res.data?.rows || res.data || []);
       if (res.data.length > 0) setSelectedRole(res.data[0].id);
     }).catch(() => {
       message.error('Failed to load roles');

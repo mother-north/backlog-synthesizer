@@ -165,4 +165,101 @@ async function updateStoryStatusAfterCheckResolution(storyId: number): Promise<v
   }
 }
 
+// ── Actions endpoints (open checks + stories awaiting confirmation) ──
+
+// Get action count for current user's roles
+router.get('/actions/count', async (req: AuthRequest, res: Response) => {
+  try {
+    const userRoles = req.user?.roles || [];
+    // Map roles to routed_to values
+    const routedTo: string[] = [];
+    if (userRoles.includes('Admin') || userRoles.includes('PM')) routedTo.push('PM');
+    if (userRoles.includes('Admin') || userRoles.includes('Architect')) routedTo.push('Architect');
+    if (userRoles.includes('Admin') || userRoles.includes('Dev Lead')) routedTo.push('Dev Lead');
+
+    let count = 0;
+    if (routedTo.length > 0) {
+      const result = await query(
+        `SELECT COUNT(*) as count FROM checks WHERE status = 'open' AND routed_to = ANY($1)`,
+        [routedTo]
+      );
+      count = parseInt(result.rows[0].count);
+    }
+
+    // Also count stories awaiting confirmation (any role can confirm)
+    const awaitingResult = await query(
+      `SELECT COUNT(*) as count FROM stories WHERE status = 'awaiting_confirmation'`
+    );
+    count += parseInt(awaitingResult.rows[0].count);
+
+    res.json({ count });
+  } catch (error) {
+    logger.error('Get action count error:', error);
+    res.status(500).json({ error: 'Failed to get action count' });
+  }
+});
+
+// Get actions list for current user's roles
+router.get('/actions', async (req: AuthRequest, res: Response) => {
+  try {
+    const userRoles = req.user?.roles || [];
+    const routedTo: string[] = [];
+    if (userRoles.includes('Admin') || userRoles.includes('PM')) routedTo.push('PM');
+    if (userRoles.includes('Admin') || userRoles.includes('Architect')) routedTo.push('Architect');
+    if (userRoles.includes('Admin') || userRoles.includes('Dev Lead')) routedTo.push('Dev Lead');
+
+    const actions: any[] = [];
+
+    // Open checks routed to user's roles
+    if (routedTo.length > 0) {
+      const checksResult = await query(
+        `SELECT c.*, s.title as story_title, s.meeting_id, m.title as meeting_title
+         FROM checks c
+         JOIN stories s ON c.story_id = s.id
+         JOIN meetings m ON s.meeting_id = m.id
+         WHERE c.status = 'open' AND c.routed_to = ANY($1)
+         ORDER BY c.id DESC`,
+        [routedTo]
+      );
+      for (const row of checksResult.rows) {
+        actions.push({
+          type: row.check_type,
+          item: row.story_title,
+          meeting: row.meeting_title,
+          meeting_id: row.meeting_id,
+          story_id: row.story_id,
+          check_id: row.id,
+          routed_to: row.routed_to,
+          created_at: row.created_at || new Date().toISOString(),
+        });
+      }
+    }
+
+    // Stories awaiting confirmation
+    const awaitingResult = await query(
+      `SELECT s.id, s.title, s.meeting_id, m.title as meeting_title, s.created_at
+       FROM stories s
+       JOIN meetings m ON s.meeting_id = m.id
+       WHERE s.status = 'awaiting_confirmation'
+       ORDER BY s.created_at DESC`
+    );
+    for (const row of awaitingResult.rows) {
+      actions.push({
+        type: 'confirmation',
+        item: row.title,
+        meeting: row.meeting_title,
+        meeting_id: row.meeting_id,
+        story_id: row.id,
+        routed_to: 'Any',
+        created_at: row.created_at,
+      });
+    }
+
+    res.json({ rows: actions, total: actions.length });
+  } catch (error) {
+    logger.error('Get actions error:', error);
+    res.status(500).json({ error: 'Failed to get actions' });
+  }
+});
+
 export default router;

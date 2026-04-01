@@ -39,7 +39,7 @@ export default function KnowledgeBase() {
     setSearched(true);
     try {
       const res = await kbApi.search(query, selectedTypes);
-      setResults(res.data);
+      setResults(res.data?.results || res.data?.rows || res.data || []);
     } catch {
       message.error('Search failed');
     } finally {

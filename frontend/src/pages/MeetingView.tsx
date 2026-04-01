@@ -166,7 +166,7 @@ export default function MeetingView() {
   const fetchMemos = async () => {
     try {
       const res = await memosApi.getByMeeting(meetingId);
-      setMemos(res.data);
+      setMemos(res.data?.rows || res.data || []);
     } catch { /* empty */ }
   };
 
