@@ -149,7 +149,7 @@ function ProcessingStatus({ meetingId, onComplete }: { meetingId: number; onComp
       <LoadingOutlined spin style={{ fontSize: 18, color: 'var(--primary)' }} />
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>
-          Processing — Step {doneCount + (runningStep ? 1 : 0)}/{total}
+          Processing — Step {doneCount + (runningStep ? 1 : 0)} of {total}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-sec)' }}>
           {runningStep
@@ -157,12 +157,9 @@ function ProcessingStatus({ meetingId, onComplete }: { meetingId: number; onComp
             : doneCount === 0
               ? 'Starting pipeline...'
               : doneCount >= total
-                ? 'Finishing...'
-                : `Preparing ${AGENT_LABELS[AGENT_ORDER[doneCount]] || AGENT_ORDER[doneCount]}...`}
+                ? 'Completing...'
+                : `Starting ${AGENT_LABELS[AGENT_ORDER[doneCount]] || AGENT_ORDER[doneCount]}...`}
         </div>
-      </div>
-      <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--primary)' }}>
-        {doneCount}/{total} done
       </div>
     </div>
   );
