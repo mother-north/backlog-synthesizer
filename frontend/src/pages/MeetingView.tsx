@@ -153,6 +153,17 @@ export default function MeetingView() {
   // Transcript search
   const [transcriptSearch, setTranscriptSearch] = useState('');
 
+  // Listen for "View in transcript" from StoryCard
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.tab) handleTabChange(detail.tab);
+      if (detail?.search) setTranscriptSearch(detail.search);
+    };
+    window.addEventListener('switchTab', handler);
+    return () => window.removeEventListener('switchTab', handler);
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       const [meetingRes, storiesRes, epicsRes, checksRes] = await Promise.all([

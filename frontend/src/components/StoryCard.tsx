@@ -214,7 +214,12 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
           <div style={{ marginBottom: 16, padding: 12, background: 'var(--blue-50)', borderRadius: 6, borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontSize: 12, color: 'var(--text-sec)', marginBottom: 4 }}>Source Citation</div>
             <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--gray-800)', margin: 0 }}>"{story.source_citation}"</p>
-            <Button type="link" size="small" icon={<LinkOutlined />} style={{ paddingLeft: 0, marginTop: 4 }}>
+            <Button type="link" size="small" icon={<LinkOutlined />} style={{ paddingLeft: 0, marginTop: 4 }}
+              onClick={() => {
+                // Switch to Meeting Info tab with search query
+                window.history.replaceState(null, '', `#info`);
+                window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'info', search: story.source_citation?.slice(0, 50) } }));
+              }}>
               View in transcript
             </Button>
           </div>
