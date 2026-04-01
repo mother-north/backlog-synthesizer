@@ -167,10 +167,10 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
 
     if not candidate_stories:
         try:
-        from tools.progress import update_progress
-        update_progress(meeting_id, "validator", "done", "No stories to validate.")
-    except Exception:
-        pass
+            from tools.progress import update_progress
+            update_progress(meeting_id, "validator", "done", "No stories to validate.")
+        except Exception:
+            pass
         return {"validation_results": [], "errors": errors}
 
     # Re-read transcript if not in state

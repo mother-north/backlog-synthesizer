@@ -175,7 +175,7 @@ async def run_pipeline(meeting_id: int):
     config = {
         "configurable": {
             "thread_id": thread_id,
-            "progress_callback": _make_progress_callback(meeting_id),
+            # progress tracked via tools.progress
         }
     }
 
@@ -195,8 +195,8 @@ async def run_pipeline(meeting_id: int):
             logger.info("Pipeline completed for meeting %s", meeting_id)
         except Exception as e:
             logger.exception("Pipeline failed for meeting %s", meeting_id)
-            cb = _make_progress_callback(meeting_id)
-            cb({"agent": "pipeline", "status": "error", "message": str(e)})
+            from tools.progress import update_progress
+            update_progress(meeting_id, "validator", "error", str(e))
         finally:
             # Signal end of progress
             q = _progress_queues.get(meeting_id)
@@ -264,7 +264,7 @@ async def resume_pipeline(meeting_id: int, body: ResumeRequest):
     config = {
         "configurable": {
             "thread_id": thread_id,
-            "progress_callback": _make_progress_callback(meeting_id),
+            # progress tracked via tools.progress
         }
     }
 
@@ -277,8 +277,8 @@ async def resume_pipeline(meeting_id: int, body: ResumeRequest):
             logger.info("Pipeline resumed and completed for meeting %s", meeting_id)
         except Exception as e:
             logger.exception("Pipeline resume failed for meeting %s", meeting_id)
-            cb = _make_progress_callback(meeting_id)
-            cb({"agent": "pipeline", "status": "error", "message": str(e)})
+            from tools.progress import update_progress
+            update_progress(meeting_id, "validator", "error", str(e))
         finally:
             q = _progress_queues.get(meeting_id)
             if q:
