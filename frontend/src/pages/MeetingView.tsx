@@ -8,6 +8,7 @@ import {
   SearchOutlined,
   DownOutlined,
   RightOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi } from '../services/api';
@@ -240,28 +241,66 @@ export default function MeetingView() {
     return true;
   });
 
+  // Parse ERIS-XXX references from check details
+  const renderDetailsWithBacklogLinks = (details: string) => {
+    if (!details) return '-';
+    const parts = details.split(/(ERIS-\d+)/g);
+    return (
+      <span>
+        {parts.map((part, i) =>
+          /^ERIS-\d+$/.test(part) ? (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <Tag color="blue" style={{ margin: 0, cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(`/data/backlog?search=${part}`, '_blank');
+                }}>
+                {part} <EyeOutlined style={{ fontSize: 10, marginLeft: 2 }} />
+              </Tag>
+            </span>
+          ) : <span key={i}>{part}</span>
+        )}
+      </span>
+    );
+  };
+
   const checksColumns: ColumnsType<Check> = [
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 60,
+      sorter: (a, b) => a.id - b.id,
+      render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)' }}>{id}</span>,
+    },
     {
       title: 'Type',
       dataIndex: 'check_type',
       key: 'check_type',
+      width: 140,
+      filters: Array.from(new Set(checks.map(c => c.check_type))).filter(Boolean).map(v => ({ text: v, value: v })),
+      onFilter: (value, record) => record.check_type === value,
       render: (type: string) => <Tag>{type}</Tag>,
     },
     {
-      title: 'Story',
-      dataIndex: 'story_title',
-      key: 'story',
+      title: 'Details',
+      dataIndex: 'details',
+      key: 'details',
+      ellipsis: true,
+      render: (details: string) => renderDetailsWithBacklogLinks((details || '').slice(0, 120) + ((details || '').length > 120 ? '...' : '')),
     },
     {
       title: 'Role',
       dataIndex: 'routed_to',
       key: 'role',
+      width: 100,
       render: (role: string) => <Tag color="blue">{role}</Tag>,
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
+      width: 110,
       render: (status: string) => (
         <span className="status-badge" style={{
           background: `${statusColors[status] || 'var(--gray-400)'}20`,
@@ -274,6 +313,7 @@ export default function MeetingView() {
     {
       title: 'Action',
       key: 'action',
+      width: 90,
       render: (_, record) => (
         record.status === 'open' && canResolve(record.routed_to) ? (
           <Button size="small" type="primary" onClick={() => setResolvingCheckId(record.id)}>
@@ -637,7 +677,7 @@ export default function MeetingView() {
                           <div style={{ padding: '8px 0' }}>
                             <div style={{ marginBottom: 12 }}>
                               <div style={{ fontWeight: 500, marginBottom: 4 }}>Details</div>
-                              <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{record.details || 'No details'}</div>
+                              <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{renderDetailsWithBacklogLinks(record.details || 'No details')}</div>
                             </div>
                             {record.proposed_resolution && (
                               <div style={{ marginBottom: 12 }}>
