@@ -61,7 +61,7 @@ export default function ConfirmDialog({
         disabled: requireInput && !inputValue.trim(),
         loading,
       }}
-      destroyOnClose
+      destroyOnHidden
     >
       <p style={{ marginBottom: requireInput ? 16 : 0 }}>{message}</p>
       {requireInput && (

@@ -152,7 +152,7 @@ export default function Users() {
         open={modalOpen}
         onCancel={() => { setModalOpen(false); setEditingUser(null); }}
         onOk={() => form.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSave}>
           <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
@@ -182,7 +182,7 @@ export default function Users() {
         open={!!resetPasswordModal}
         onCancel={() => { setResetPasswordModal(null); resetForm.resetFields(); }}
         onOk={() => resetForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={resetForm} layout="vertical" onFinish={handleResetPassword}>
           <Form.Item name="password" label="New Password" rules={[{ required: true, min: 6 }]}>

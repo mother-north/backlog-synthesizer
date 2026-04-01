@@ -116,7 +116,7 @@ export default function Roles() {
         open={modalOpen}
         onCancel={() => { setModalOpen(false); setEditingRole(null); }}
         onOk={() => form.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSave}>
           <Form.Item name="name" label="Role Name" rules={[{ required: true }]}>
