@@ -90,9 +90,14 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 | 3.1 Metrics | done |
 | 3.2 Scoring Rubric | done |
 | 3.3 Eval Pipeline Design | done |
-| 4.1–4.6 | not started |
+| 4.1 Foundation | done |
+| 4.2 Core Agents | done |
+| 4.3 Memory & Observability | done |
+| 4.4 Eval Pipeline | done |
+| 4.5 Eval Run & Demo | not started |
+| 4.6 Exit: Final Check | not started |
 
-**Current:** Phase 2 — Design
+**Current:** Phase 4 — Implementation (4.5 Eval Run & Demo)
 
 ---
 

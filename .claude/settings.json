@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:thenewstack.io)",
+      "WebFetch(domain:www.digitalocean.com)",
+      "WebFetch(domain:blog.jetbrains.com)"
+    ]
+  }
+}

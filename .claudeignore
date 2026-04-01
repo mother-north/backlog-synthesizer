@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.venv/
+agents/.venv/
+
+# Build output
+dist/
+build/
+.next/
+
+# Caches
+__pycache__/
+*.pyc
+.cache/
+.pytest_cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# Lock files (large, not useful for context)
+package-lock.json
+yarn.lock
+poetry.lock
+
+# Coverage / reports
+coverage/
+data/eval_reports/
+.nyc_output/
