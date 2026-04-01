@@ -674,7 +674,7 @@ export default function MeetingView() {
                       {
                         title: 'Epic',
                         key: 'epic',
-                        width: 160,
+                        ellipsis: true,
                         filters: [
                           ...epics.map(e => ({ text: e.title, value: e.id })),
                           { text: 'No Epic', value: 0 },
@@ -683,7 +683,7 @@ export default function MeetingView() {
                         render: (_: unknown, record: any) => {
                           const epic = epics.find(e => e.id === record.epic_id);
                           return epic ? (
-                            <span style={{ fontSize: 12 }}>
+                            <span style={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
                               {epic.external_id && <Tag color={epic.is_proposed ? 'orange' : 'blue'} style={{ marginRight: 4 }}>{epic.external_id}</Tag>}
                               {epic.title}
                             </span>
