@@ -8,29 +8,25 @@ const router = Router();
 router.use(authenticateToken);
 
 // Search knowledge base (proxies to FastAPI for vector search, falls back to text search)
-router.get('/search', async (req: AuthRequest, res: Response) => {
-  const { q, types, limit: limitParam } = req.query;
+router.post('/search', async (req: AuthRequest, res: Response) => {
+  const { query: q, content_types: contentTypes, limit: limitParam } = req.body;
 
   if (!q || typeof q !== 'string') {
-    return res.status(400).json({ error: 'Query parameter "q" is required' });
+    return res.status(400).json({ error: 'Field "query" is required' });
   }
 
   const searchLimit = parseInt(limitParam as string) || 20;
-  const contentTypes = types ? (types as string).split(',') : null;
 
   try {
     // Try FastAPI vector search first
     try {
-      const params = new URLSearchParams({
-        q,
-        limit: searchLimit.toString(),
-      });
-      if (contentTypes) {
-        params.append('types', contentTypes.join(','));
-      }
-
       const agentsResponse = await fetch(
-        `${config.agentsUrl}/kb/search?${params.toString()}`
+        `${config.agentsUrl}/kb/search`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q, content_types: contentTypes, limit: searchLimit }),
+        }
       );
 
       if (agentsResponse.ok) {
