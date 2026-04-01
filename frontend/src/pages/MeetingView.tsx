@@ -15,7 +15,7 @@ import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi, dataA
 import { statusColors } from '../theme';
 import { useAuthStore } from '../store/auth';
 import StoryCard from '../components/StoryCard';
-import EpicProposal from '../components/EpicProposal';
+// EpicProposal moved to Epics tab
 import CheckPanel from '../components/CheckPanel';
 // PipelineProgress replaced with inline ProcessingStatus
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -298,8 +298,7 @@ export default function MeetingView() {
 
   // storiesByEpic removed — stories now in flat table with Epic column
 
-  const proposedEpics = epics.filter(e => e.is_proposed);
-  const existingEpics = epics.filter(e => !e.is_proposed);
+  // proposedEpics/existingEpics — shown in Epics tab
 
   // Confirmable stories for bulk
   const confirmableStories = storiesWithChecks.filter(s =>
