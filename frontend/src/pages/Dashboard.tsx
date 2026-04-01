@@ -6,7 +6,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
-  LoadingOutlined,
   WarningOutlined,
   DashboardOutlined,
 } from '@ant-design/icons';
@@ -80,10 +79,10 @@ export default function Dashboard() {
       <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-sec)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Meetings</div>
       <Row gutter={16} style={{ marginBottom: 24 }}>
         {[
-          { label: 'Total', value: stats.meetings.total, icon: <FileTextOutlined />, color: 'var(--primary)' },
-          { label: 'Processing', value: stats.meetings.processing, icon: <LoadingOutlined />, color: 'var(--accent)' },
-          { label: 'In Review', value: stats.meetings.in_review, icon: <WarningOutlined />, color: 'var(--warning)' },
-          { label: 'Completed', value: stats.meetings.completed, icon: <CheckCircleOutlined />, color: 'var(--success)' },
+          { label: 'Total', value: Number(stats.meetings?.total) || 0, icon: <FileTextOutlined />, color: 'var(--primary)' },
+          { label: 'Processing', value: Number(stats.meetings?.processing) || 0, icon: <ClockCircleOutlined />, color: 'var(--accent)' },
+          { label: 'In Review', value: Number(stats.meetings?.in_review) || 0, icon: <WarningOutlined />, color: 'var(--warning)' },
+          { label: 'Completed', value: Number(stats.meetings?.completed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)' },
         ].map(card => (
           <Col span={6} key={card.label}>
             <div className="bs-stat-card">
@@ -99,11 +98,11 @@ export default function Dashboard() {
       <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-sec)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stories</div>
       <Row gutter={16} style={{ marginBottom: 24 }}>
         {[
-          { label: 'Generated', value: stats.stories.total, icon: <UnorderedListOutlined />, color: 'var(--gray-600)' },
-          { label: 'Confirmed', value: stats.stories.confirmed, icon: <CheckCircleOutlined />, color: 'var(--success)' },
-          { label: 'Rejected', value: stats.stories.rejected, icon: <CloseCircleOutlined />, color: 'var(--error)' },
-          { label: 'Pending', value: stats.stories.pending, icon: <ClockCircleOutlined />, color: 'var(--warning)' },
-          { label: 'Avg Review', value: `${stats.stories.avg_review_days?.toFixed(1) || '-'} days`, icon: <ClockCircleOutlined />, color: 'var(--accent)' },
+          { label: 'Generated', value: Number(stats.stories?.total) || 0, icon: <UnorderedListOutlined />, color: 'var(--gray-600)' },
+          { label: 'Confirmed', value: Number(stats.stories?.confirmed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)' },
+          { label: 'Rejected', value: Number(stats.stories?.rejected) || 0, icon: <CloseCircleOutlined />, color: 'var(--error)' },
+          { label: 'Pending', value: Number(stats.stories?.total || 0) - Number(stats.stories?.confirmed || 0) - Number(stats.stories?.rejected || 0), icon: <ClockCircleOutlined />, color: 'var(--warning)' },
+          { label: 'Avg Review', value: stats.stories?.avg_review_days ? `${Number(stats.stories.avg_review_days).toFixed(1)} days` : '- days', icon: <ClockCircleOutlined />, color: 'var(--accent)' },
         ].map(card => (
           <Col span={4} key={card.label} style={{ marginBottom: 8 }}>
             <div className="bs-stat-card">
