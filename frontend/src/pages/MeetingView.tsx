@@ -307,6 +307,25 @@ export default function MeetingView() {
       render: (type: string) => <Tag>{type}</Tag>,
     },
     {
+      title: 'Story',
+      key: 'story',
+      width: 200,
+      ellipsis: true,
+      render: (_: unknown, record: Check) => {
+        const story = stories.find(s => s.id === record.story_id);
+        return story ? (
+          <span style={{ fontSize: 13 }}>{story.title}</span>
+        ) : (
+          <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>Story #{record.story_id}</span>
+        );
+      },
+      filters: Array.from(new Set(checks.map(c => c.story_id))).filter(Boolean).map(sid => {
+        const story = stories.find(s => s.id === sid);
+        return { text: story?.title || `Story #${sid}`, value: sid as number };
+      }),
+      onFilter: (value, record) => record.story_id === value,
+    },
+    {
       title: 'Details',
       dataIndex: 'details',
       key: 'details',
