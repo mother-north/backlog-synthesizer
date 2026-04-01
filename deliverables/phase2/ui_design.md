@@ -407,22 +407,33 @@ Search across all stored knowledge.
 #### Backlog Data (`/data/backlog`)
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Backlog Data                                     [ Upload JSON ]    │
-│  Last uploaded: Mar 31, 2026  │  Items: 68                          │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  [Search: ___________]  [Type: All ▼]  [Epic: All ▼]               │
-│                                                                      │
-│  ID        │ Type    │ Title                    │ Epic     │ Status  │
-│  ──────────┼─────────┼──────────────────────────┼──────────┼─────────│
-│  ERIS-001  │ epic    │ Risk Assessment Engine   │ —        │ active  │
-│  ERIS-010  │ story   │ Risk scoring algorithm   │ ERIS-001 │ done    │
-│  ERIS-012  │ bug     │ NaN for empty documents  │ ERIS-001 │ backlog │
-│  ...                                                                 │
-│                                                        [Download JSON]│
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Backlog Data                              [ Upload JSON ] [ Download ] │
+│  Items: 68                                                              │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  [Search by title...]  [Type: All ▼]                                    │
+│                                                                          │
+│  ID ▲      │ Type ▼  │ Title ▲           │ Epic ▼   │ Priority ▼│Status▼│ │
+│  ──────────┼─────────┼───────────────────┼──────────┼───────────┼───────│ │
+│  ERIS-001  │ epic    │ Risk Assessment   │ —        │ high      │active │👁│
+│  ERIS-010  │ story   │ Risk scoring algo │ ERIS-001 │ medium    │done   │👁│
+│  ERIS-012  │ bug     │ NaN for empty doc │ ERIS-001 │ critical  │backlog│👁│
+│  ...                                                                     │
+│  Showing 1-20 of 68                                    [< ] Page 1 [> ] │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Table features:**
+- **Column sorting** on ID, Title (click header to toggle ▲/▼)
+- **Column filters** on Type, Epic, Priority, Status (dropdown filter in header)
+- **View detail** button (👁) or double-click row → opens detail modal
+- **Pagination** with configurable page size (20/50/100)
+
+**View Detail Modal:**
+- Shows all fields: ID, type, title, description, epic, status, priority, labels, acceptance criteria, dependencies
+- Read-only view (editing backlog happens outside this system)
+- Labels shown as tags, acceptance criteria as bulleted list, dependencies as linked tags
 
 Upload: validates JSON against schema → truncate + insert in transaction → re-embed for KB search.
 
