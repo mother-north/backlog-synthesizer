@@ -232,6 +232,10 @@ body {
   border-radius: 8px;
   padding: 16px 20px;
   text-align: center;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .bs-stat-card .stat-value {
