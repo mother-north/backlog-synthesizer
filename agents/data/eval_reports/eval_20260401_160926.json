@@ -1,0 +1,142 @@
+{
+  "run_id": "eval_20260401_160926",
+  "timestamp": "2026-04-01T16:09:26.519491+00:00",
+  "scenarios_run": 1,
+  "per_scenario": [
+    {
+      "scenario_id": "2",
+      "description": "Risk scoring algorithm review meeting with mixed bugs and features. Tests type classification, duplicate detection (NaN bug overlaps ERIS-012), and architecture constraint detection (SQLite single-writer limitation).",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 2,
+          "partial": 4,
+          "missing": 0,
+          "extra": 0,
+          "total": 6,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 4.666666666666667,
+          "avg_clarity": 4.666666666666667,
+          "avg_actionability": 5,
+          "avg_completeness": 4.5,
+          "avg_criteria": 4.5,
+          "status": "pass"
+        },
+        "M3_tag_f1": {
+          "score": 0.5277777777777778,
+          "status": "pass"
+        },
+        "M4_epic_accuracy": {
+          "score": 0.8333333333333334,
+          "correct": 5,
+          "total": 6,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.3333333333333333,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.3333333333333333,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.3333333333333333,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.5,
+          "status": "acceptable"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 4,
+          "paraphrase": 2,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "pass",
+          "details": {
+            "accuracies": {
+              "high": 1.0,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 1.0,
+          "status": "pass"
+        },
+        "M10_quality_score": {
+          "status": "pass",
+          "ambiguity_delta": 0,
+          "actionability_match": true
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "M1_story_completeness": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M2_story_quality": {
+      "avg": 4.667,
+      "status": "pass"
+    },
+    "M3_tag_f1": {
+      "avg": 0.528,
+      "status": "pass"
+    },
+    "M4_epic_accuracy": {
+      "avg": 0.833,
+      "status": "pass"
+    },
+    "M5_check_precision": {
+      "avg": 0.333,
+      "status": "fail"
+    },
+    "M5_check_recall": {
+      "avg": 0.333,
+      "status": "fail"
+    },
+    "M5_check_f1": {
+      "avg": 0.333,
+      "status": "pass"
+    },
+    "M6_conflict_f1": {
+      "avg": 0.5,
+      "status": "acceptable"
+    },
+    "M7_grounding": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M9_hygiene_precision": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M8_calibration": {
+      "status": "pass",
+      "pass_count": 1,
+      "total": 1
+    },
+    "M10_quality_score": {
+      "status": "pass",
+      "pass_count": 1,
+      "total": 1
+    }
+  },
+  "overall_status": "fail",
+  "failures": [
+    "M5_check_precision aggregate is 0.33 \u2014 below threshold",
+    "M5_check_recall aggregate is 0.33 \u2014 below threshold"
+  ],
+  "warnings": [
+    "M6_conflict_f1 aggregate is 'acceptable' (0.50) \u2014 consider improvement"
+  ]
+}

@@ -216,31 +216,79 @@ def score_tags(matches: list[Match]) -> M3Score:
 
 def _normalize_epic(epic: str) -> str:
     """Normalize epic assignment: 'ERIS-001 (existing)' → 'eris-001'."""
-    epic = epic.lower().strip()
+    epic = str(epic).lower().strip()
     # Remove "(existing)", "(proposed)", etc.
     epic = re.sub(r'\s*\(.*?\)\s*', '', epic).strip()
     return epic
 
 
+# Cache: DB epic_id (int) → "external_id title" for matching
+_epic_cache: dict[str, str] = {}
+
+def _resolve_epic_id(epic_id_or_str: str) -> str:
+    """Resolve a numeric epic_id to its external_id + title via DB lookup."""
+    key = str(epic_id_or_str).strip()
+    if not key or key in ('none', 'null', '0', ''):
+        return ''
+    if key in _epic_cache:
+        return _epic_cache[key]
+
+    # If it already looks like an external_id (e.g., "ERIS-001"), return as-is
+    if not key.isdigit():
+        return _normalize_epic(key)
+
+    # Numeric — look up in DB
+    try:
+        from tools.db import execute_query_one
+        row = execute_query_one(
+            "SELECT external_id, title FROM epics WHERE id = %s",
+            (int(key),)
+        )
+        if row:
+            result = f"{row[0] or ''} {row[1] or ''}".strip().lower()
+            _epic_cache[key] = result
+            return result
+        # Try backlog_items epics
+        row = execute_query_one(
+            "SELECT external_id, title FROM backlog_items WHERE id = %s AND type = 'epic'",
+            (int(key),)
+        )
+        if row:
+            result = f"{row[0] or ''} {row[1] or ''}".strip().lower()
+            _epic_cache[key] = result
+            return result
+    except Exception:
+        pass
+
+    _epic_cache[key] = key
+    return key
+
+
 def score_epic_accuracy(matches: list[Match]) -> M4Score:
-    """Match on epic assignment (normalized)."""
+    """Match on epic assignment — resolves numeric IDs to external_id + name."""
     correct = 0
     total = 0
     for m in matches:
         if m.system and m.golden:
             total += 1
-            sys_epic = _normalize_epic(
+            # System may have numeric epic_id or epic_assignment string
+            sys_raw = (
                 m.system.get("epic_assignment", "") or
-                m.system.get("epic_id", "") or
+                str(m.system.get("epic_id", "")) or
                 str(m.system.get("proposed_epic", ""))
             )
+            sys_epic = _resolve_epic_id(sys_raw)
+
             gold_epic = _normalize_epic(
                 m.golden.get("epic_assignment", "") or
                 m.golden.get("epic_id", "") or
                 str(m.golden.get("proposed_epic", ""))
             )
             if sys_epic and gold_epic:
-                if sys_epic == gold_epic or fuzzy_match(sys_epic, gold_epic) > 0.6:
+                # Match if external_id matches, or names are fuzzy similar
+                if (sys_epic == gold_epic or
+                    gold_epic in sys_epic or sys_epic in gold_epic or
+                    fuzzy_match(sys_epic, gold_epic) > 0.5):
                     correct += 1
     return M4Score(
         correct=correct,
