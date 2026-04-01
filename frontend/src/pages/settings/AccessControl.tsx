@@ -1,95 +1,162 @@
 import { useState, useEffect } from 'react';
-import { Table, Select, Switch, Button, Skeleton, App } from 'antd';
+import { Table, Checkbox, Button, App, Typography } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
 import { menuAccessApi, rolesApi } from '../../services/api';
-import { getMenuAccessItems } from '../../config/navConfig';
+import { ALL_NAV_ITEMS, getMenuAccessItems } from '../../config/navConfig';
 import { useAuthStore } from '../../store/auth';
+
+const { Text } = Typography;
 
 interface Role {
   id: number;
   name: string;
 }
 
-interface AccessRule {
-  menuPath: string;
-  tabName: string | null;
-  label: string;
-  group: string;
-  allowed: boolean;
-}
+const ROUTE_ITEMS = getMenuAccessItems().filter(m => m.isRoute);
 
 export default function AccessControl() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [selectedRole, setSelectedRole] = useState<number | null>(null);
-  const [rules, setRules] = useState<AccessRule[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const { message } = App.useApp();
   const { bumpMenuVersion } = useAuthStore();
 
-  useEffect(() => {
-    rolesApi.getAll().then(res => {
-      const list = res.data?.rows || res.data || [];
-      setRoles(list);
-      if (list.length > 0) setSelectedRole(list[0].id);
-    }).catch(() => {
-      message.error('Failed to load roles');
-    }).finally(() => setLoading(false));
-  }, [message]);
+  useEffect(() => { fetchData(); }, []);
 
-  useEffect(() => {
-    if (!selectedRole) return;
+  const fetchData = async () => {
     setLoading(true);
-    menuAccessApi.getByRole(selectedRole).then(res => {
-      const dbRules = (res.data?.rows || res.data || []) as Array<{ menu_path: string; tab_name: string | null; allowed: boolean }>;
-      const ruleMap = new Map(dbRules.map(r => [`${r.menu_path}::${String(r.tab_name)}`, r.allowed]));
-      const menuItems = getMenuAccessItems();
-      const merged: AccessRule[] = menuItems.map(item => ({
-        ...item,
-        allowed: ruleMap.get(`${item.menuPath}::${String(item.tabName)}`) ?? true,
-      }));
-      setRules(merged);
-    }).catch(() => {
-      message.error('Failed to load access rules');
-    }).finally(() => setLoading(false));
-  }, [selectedRole, message]);
+    try {
+      const rolesResponse = await rolesApi.getAll();
+      const rolesList = rolesResponse.data?.rows || rolesResponse.data || [];
+      setRoles(rolesList);
 
-  const handleToggle = (index: number, allowed: boolean) => {
-    setRules(prev => prev.map((r, i) => i === index ? { ...r, allowed } : r));
+      const accessResponse = await menuAccessApi.getAll();
+      const accessData = accessResponse.data?.rows || accessResponse.data || [];
+
+      const perms: Record<string, Record<string, boolean>> = {};
+      rolesList.forEach((role: Role) => {
+        ROUTE_ITEMS.forEach((menu) => {
+          const key = `${menu.menuPath}:${menu.tabName}`;
+          if (!perms[key]) perms[key] = {};
+
+          const hasRule = accessData.some(
+            (a: any) =>
+              a.role_id === role.id &&
+              a.menu_path === menu.menuPath &&
+              ((menu.tabName === null && a.tab_name === null) || a.tab_name === menu.tabName)
+          );
+          const hasAccess = hasRule && accessData.some(
+            (a: any) =>
+              a.role_id === role.id &&
+              a.menu_path === menu.menuPath &&
+              ((menu.tabName === null && a.tab_name === null) || a.tab_name === menu.tabName) &&
+              a.allowed === true
+          );
+          perms[key][role.name] = hasRule ? hasAccess : true;
+        });
+      });
+
+      setPermissions(perms);
+    } catch {
+      message.error('Failed to load access data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckboxChange = (menuKey: string, roleName: string, checked: boolean) => {
+    setPermissions(prev => ({ ...prev, [menuKey]: { ...prev[menuKey], [roleName]: checked } }));
+  };
+
+  const handleGroupToggle = (childKeys: string[], roleName: string, checked: boolean) => {
+    setPermissions(prev => {
+      const next = { ...prev };
+      childKeys.forEach(k => { next[k] = { ...next[k], [roleName]: checked }; });
+      return next;
+    });
   };
 
   const handleSave = async () => {
-    if (!selectedRole) return;
     setSaving(true);
     try {
-      await menuAccessApi.bulkUpdate(
-        selectedRole,
-        rules.map(r => ({ menuPath: r.menuPath, tabName: r.tabName || undefined, allowed: r.allowed }))
-      );
-      message.success('Access rules saved');
+      for (const role of roles) {
+        const access = ROUTE_ITEMS.map(menu => ({
+          menuPath: menu.menuPath,
+          tabName: menu.tabName ?? undefined,
+          allowed: permissions[`${menu.menuPath}:${menu.tabName}`]?.[role.name] || false,
+        }));
+        await menuAccessApi.bulkUpdate(role.id, access);
+      }
+      message.success('Permissions saved successfully');
       bumpMenuVersion();
     } catch {
-      message.error('Failed to save access rules');
+      message.error('Failed to save permissions');
     } finally {
       setSaving(false);
     }
   };
 
-  const columns: ColumnsType<AccessRule> = [
-    { title: 'Section', dataIndex: 'group', key: 'group' },
-    { title: 'Menu Item', dataIndex: 'label', key: 'label' },
-    { title: 'Path', dataIndex: 'menuPath', key: 'path', render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
+  // Build dataSource — groups with toggle-all headers + indented children
+  const dataSource: any[] = [];
+
+  for (const nav of ALL_NAV_ITEMS) {
+    if (nav.children) {
+      const childKeys = nav.children.map(child => {
+        const tabName = child.key.split('/').pop() ?? null;
+        return `${child.key}:${tabName}`;
+      });
+      dataSource.push({ key: `__header__${nav.key}`, label: nav.label, isHeader: true, childKeys });
+      for (const child of nav.children) {
+        const tabName = child.key.split('/').pop() ?? null;
+        dataSource.push({ key: `${child.key}:${tabName}`, label: child.label, menuPath: child.key, tabName, isHeader: false, indent: 1 });
+      }
+    } else {
+      const routeKey = `${nav.key}:null`;
+      dataSource.push({ key: `__header__${nav.key}`, label: nav.label, isHeader: true, childKeys: [routeKey] });
+      dataSource.push({ key: routeKey, label: nav.label, menuPath: nav.key, tabName: null, isHeader: false, indent: 1 });
+    }
+  }
+
+  const columns = [
     {
-      title: 'Allowed',
-      key: 'allowed',
-      render: (_, record, index) => (
-        <Switch
-          checked={record.allowed}
-          onChange={(v) => handleToggle(index, v)}
-        />
-      ),
+      title: 'Menu Item',
+      dataIndex: 'label',
+      key: 'label',
+      fixed: 'left' as const,
+      width: 240,
+      render: (_: any, record: any) => {
+        if (record.isHeader) {
+          return <Text strong style={{ color: 'var(--blue-700)', textTransform: 'uppercase', fontSize: 11, letterSpacing: 1 }}>{record.label}</Text>;
+        }
+        return <div style={{ paddingLeft: record.indent * 20 }}>{record.label}</div>;
+      },
     },
+    ...roles.map(role => ({
+      title: role.name,
+      key: role.name,
+      width: 120,
+      align: 'center' as const,
+      render: (_: any, record: any) => {
+        if (record.isHeader) {
+          const keys = record.childKeys as string[];
+          const checkedCount = keys.filter(k => permissions[k]?.[role.name] !== false).length;
+          return (
+            <Checkbox
+              checked={checkedCount === keys.length}
+              indeterminate={checkedCount > 0 && checkedCount < keys.length}
+              onChange={e => handleGroupToggle(keys, role.name, e.target.checked)}
+            />
+          );
+        }
+        return (
+          <Checkbox
+            checked={permissions[record.key]?.[role.name] !== false}
+            onChange={e => handleCheckboxChange(record.key, role.name, e.target.checked)}
+          />
+        );
+      },
+    })),
   ];
 
   return (
@@ -99,32 +166,24 @@ export default function AccessControl() {
       </div>
       <div className="bs-page-header">
         <h1 className="bs-page-title">Access Control</h1>
-        <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>
+        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
           Save Changes
         </Button>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ marginRight: 8, fontSize: 13, color: 'var(--text-sec)' }}>Role:</label>
-        <Select
-          value={selectedRole}
-          onChange={setSelectedRole}
-          style={{ width: 200 }}
-          options={roles.map(r => ({ value: r.id, label: r.name }))}
-        />
+      <div style={{ background: 'var(--blue-50)', border: '1px solid var(--blue-100)', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--gray-600)' }}>
+        Configure which roles have access to each menu item. New items are enabled by default — uncheck to restrict. The sidebar menu updates instantly after saving.
       </div>
 
-      {loading ? (
-        <Skeleton active paragraph={{ rows: 10 }} />
-      ) : (
-        <Table
-          dataSource={rules}
-          columns={columns}
-          rowKey={(r) => `${r.menuPath}::${r.tabName}`}
-          pagination={false}
-          size="small"
-        />
-      )}
+      <Table
+        loading={loading}
+        dataSource={dataSource}
+        columns={columns}
+        pagination={false}
+        scroll={{ x: 'max-content' }}
+        bordered
+        size="middle"
+      />
     </div>
   );
 }
