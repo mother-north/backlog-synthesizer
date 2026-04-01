@@ -150,10 +150,10 @@ export default function MeetingView() {
         epicsApi.getByMeeting(meetingId),
         checksApi.getByMeeting(meetingId),
       ]);
-      setMeeting(meetingRes.data);
-      setStories(storiesRes.data);
-      setEpics(epicsRes.data);
-      setChecks(checksRes.data);
+      setMeeting(meetingRes.data?.rows?.[0] || meetingRes.data);
+      setStories(storiesRes.data?.rows || storiesRes.data || []);
+      setEpics(epicsRes.data?.rows || epicsRes.data || []);
+      setChecks(checksRes.data?.rows || checksRes.data || []);
     } catch {
       message.error('Failed to load meeting data');
     } finally {
@@ -176,8 +176,8 @@ export default function MeetingView() {
         auditApi.getTraces(meetingId),
         auditApi.getHistory(meetingId),
       ]);
-      setTraces(tracesRes.data);
-      setAuditLog(auditRes.data);
+      setTraces(tracesRes.data?.rows || tracesRes.data || []);
+      setAuditLog(auditRes.data?.rows || auditRes.data || []);
     } catch { /* empty */ }
   };
 

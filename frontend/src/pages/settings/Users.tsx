@@ -32,8 +32,8 @@ export default function Users() {
     setLoading(true);
     try {
       const [usersRes, rolesRes] = await Promise.all([usersApi.getAll(), rolesApi.getAll()]);
-      setUsers(usersRes.data);
-      setRoles(rolesRes.data);
+      setUsers(usersRes.data?.rows || usersRes.data || []);
+      setRoles(rolesRes.data?.rows || rolesRes.data || []);
     } catch {
       message.error('Failed to load users');
     } finally {
