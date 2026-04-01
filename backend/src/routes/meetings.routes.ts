@@ -276,4 +276,109 @@ router.get('/:id/progress', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get memos for a meeting
+router.get('/:id/memos', async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT * FROM memos WHERE meeting_id = $1 ORDER BY version DESC',
+      [req.params.id]
+    );
+    res.json({ rows: result.rows, total: result.rowCount });
+  } catch (error) {
+    logger.error('Get memos error:', error);
+    res.status(500).json({ error: 'Failed to get memos' });
+  }
+});
+
+// Generate memo for a meeting (proxy to FastAPI or create placeholder)
+router.post('/:id/memos/generate', async (req: AuthRequest, res: Response) => {
+  const meetingId = req.params.id;
+  try {
+    // Try FastAPI memo agent
+    try {
+      const agentsResponse = await fetch(`${config.agentsUrl}/pipeline/${meetingId}/memo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meeting_id: parseInt(meetingId) }),
+      });
+      if (agentsResponse.ok) {
+        const data = await agentsResponse.json();
+        return res.json(data);
+      }
+    } catch { /* FastAPI not available */ }
+
+    // Fallback: create a summary memo from DB data
+    const stories = await query(
+      `SELECT title, type, status, confidence FROM stories WHERE meeting_id = $1`,
+      [meetingId]
+    );
+    const confirmed = stories.rows.filter((s: any) => s.status === 'confirmed').length;
+    const rejected = stories.rows.filter((s: any) => s.status === 'rejected').length;
+    const pending = stories.rows.length - confirmed - rejected;
+
+    const versionResult = await query(
+      'SELECT COALESCE(MAX(version), 0) as max FROM memos WHERE meeting_id = $1',
+      [meetingId]
+    );
+    const newVersion = parseInt(versionResult.rows[0].max) + 1;
+
+    const content = `# Decision Memo (v${newVersion})\n\n` +
+      `**Stories:** ${stories.rows.length} total — ${confirmed} confirmed, ${rejected} rejected, ${pending} pending\n\n` +
+      stories.rows.map((s: any) => `- [${s.status}] ${s.title} (${s.type}, ${s.confidence})`).join('\n');
+
+    const result = await query(
+      'INSERT INTO memos (meeting_id, version, content) VALUES ($1, $2, $3) RETURNING *',
+      [meetingId, newVersion, content]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    logger.error('Generate memo error:', error);
+    res.status(500).json({ error: 'Failed to generate memo' });
+  }
+});
+
+// Get agent traces for a meeting
+router.get('/:id/traces', async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT * FROM agent_traces WHERE meeting_id = $1 ORDER BY created_at',
+      [req.params.id]
+    );
+    res.json({ rows: result.rows, total: result.rowCount });
+  } catch (error) {
+    logger.error('Get traces error:', error);
+    res.status(500).json({ error: 'Failed to get traces' });
+  }
+});
+
+// Get audit history for a meeting
+router.get('/:id/audit', async (req, res) => {
+  try {
+    const { storyId } = req.query;
+    const conditions = [`(a.entity_type = 'story' AND a.entity_id IN (SELECT id FROM stories WHERE meeting_id = $1))
+      OR (a.entity_type = 'meeting' AND a.entity_id = $1)
+      OR (a.entity_type = 'check' AND a.entity_id IN (SELECT c.id FROM checks c JOIN stories s ON c.story_id = s.id WHERE s.meeting_id = $1))`];
+    const params: any[] = [req.params.id];
+
+    if (storyId) {
+      conditions.push(`a.entity_id = $2`);
+      params.push(storyId);
+    }
+
+    const result = await query(
+      `SELECT a.*, u.email as user_email
+       FROM audit_log a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY a.created_at DESC
+       LIMIT 100`,
+      params
+    );
+    res.json({ rows: result.rows, total: result.rowCount });
+  } catch (error) {
+    logger.error('Get audit history error:', error);
+    res.status(500).json({ error: 'Failed to get audit history' });
+  }
+});
+
 export default router;
