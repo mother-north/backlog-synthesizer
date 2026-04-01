@@ -342,19 +342,13 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
 
           {/* Grounding + Confidence */}
           <div style={{ marginBottom: 16, padding: 12, background: 'var(--gray-50)', borderRadius: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>Grounding:</span>
-                <span style={{ color: groundingColors[story.grounding_status] || 'var(--gray-400)', fontWeight: 600 }}>
-                  {story.grounding_status === 'valid' ? <><CheckCircleOutlined /> Valid</> :
-                   story.grounding_status === 'warning' ? <><WarningOutlined /> Warning</> :
-                   <><CloseCircleOutlined /> Invalid</>}
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>Confidence:</span>
-                <Tag color={story.confidence === 'high' ? 'green' : story.confidence === 'medium' ? 'orange' : 'red'}>{story.confidence}</Tag>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, fontSize: 13 }}>
+              <span style={{ color: 'var(--text-sec)' }}>Grounding: <strong style={{ color: groundingColors[story.grounding_status] || 'var(--gray-400)' }}>
+                {story.grounding_status === 'valid' ? '✓ Valid' : story.grounding_status === 'warning' ? '⚠ Warning' : '✗ Invalid'}
+              </strong></span>
+              <span style={{ color: 'var(--text-sec)' }}>Confidence: <strong style={{ color: story.confidence === 'high' ? '#52c41a' : story.confidence === 'medium' ? '#faad14' : '#ff4d4f' }}>
+                {story.confidence}
+              </strong></span>
             </div>
             {story.grounding_issues && story.grounding_issues.length > 0 && (
               <ul style={{ paddingLeft: 20, marginTop: 8, marginBottom: 0, fontSize: 13 }}>
