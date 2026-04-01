@@ -9,4 +9,6 @@ Multi-agent system: meeting transcripts + architecture docs + backlog → struct
 - `project/initial_task.md` — original certification task
 - `deliverables/phaseN/` — all produced artifacts (requirements, designs, AI prompts inline)
 - `data/` — synthetic test data (meetings, architecture, backlog, golden scenarios)
-- `application/` — source code + certification Q&A
+- `backend/` — Express API gateway (TypeScript)
+- `frontend/` — React SPA (TypeScript)
+- `agents/` — Python agent pipeline (LangGraph + OpenAI)

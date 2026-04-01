@@ -49,11 +49,11 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 
 | Step | Do | Gate | Output |
 |---|---|---|---|
-| 4.1 Foundation | Project setup, ingestion, parsing | Reads all files in `data/` | `application/` |
-| 4.2 Core Agents | Decomposition, synthesis, conflict detection, orchestration | Runs on 2 golden scenarios | `application/` |
-| 4.3 Memory & Observability | Context engine, audit logging, error handling + retry | Audit log reviewable for 1 full scenario | `application/` |
-| 4.4 Eval Pipeline | Implement eval harness from Phase 3 design | Runs end-to-end on golden dataset | `application/` |
-| 4.5 Eval Run & Demo | Run eval, iterate, prepare demo | Metrics meet thresholds | `application/` |
+| 4.1 Foundation | Project setup, ingestion, parsing | Reads all files in `data/` | `backend/` + `frontend/` + `agents/` |
+| 4.2 Core Agents | Decomposition, synthesis, conflict detection, orchestration | Runs on 2 golden scenarios | `backend/` + `frontend/` + `agents/` |
+| 4.3 Memory & Observability | Context engine, audit logging, error handling + retry | Audit log reviewable for 1 full scenario | `backend/` + `frontend/` + `agents/` |
+| 4.4 Eval Pipeline | Implement eval harness from Phase 3 design | Runs end-to-end on golden dataset | `backend/` + `frontend/` + `agents/` |
+| 4.5 Eval Run & Demo | Run eval, iterate, prepare demo | Metrics meet thresholds | `backend/` + `frontend/` + `agents/` |
 | **4.6 Exit** | **Final check against `initial_task.md`** | **All exit criteria pass** | — |
 
 ### Exit Criteria
@@ -87,7 +87,9 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 | 2.3 Memory & Audit | done |
 | 2.4 UI Design | done |
 | 2.5 Architecture Diagram | done |
-| 3.1–3.3 | not started |
+| 3.1 Metrics | done |
+| 3.2 Scoring Rubric | done |
+| 3.3 Eval Pipeline Design | done |
 | 4.1–4.6 | not started |
 
 **Current:** Phase 2 — Design
