@@ -152,7 +152,13 @@ function ProcessingStatus({ meetingId, onComplete }: { meetingId: number; onComp
           Processing — Step {doneCount + (runningStep ? 1 : 0)}/{total}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-sec)' }}>
-          {runningStep ? (runningStep.message || AGENT_LABELS[runningStep.agent] || runningStep.agent) : (doneCount === 0 ? 'Starting pipeline...' : 'Finishing...')}
+          {runningStep
+            ? (runningStep.message || AGENT_LABELS[runningStep.agent] || runningStep.agent)
+            : doneCount === 0
+              ? 'Starting pipeline...'
+              : doneCount >= total
+                ? 'Finishing...'
+                : `Preparing ${AGENT_LABELS[AGENT_ORDER[doneCount]] || AGENT_ORDER[doneCount]}...`}
         </div>
       </div>
       <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--primary)' }}>
