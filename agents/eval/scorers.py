@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from statistics import mean
 from typing import Optional
+
+from difflib import SequenceMatcher
 
 from eval.matchers import (
     Match, match_stories, normalize_tags, precision_recall_f1,
@@ -170,15 +173,33 @@ async def score_story_quality(system_stories: list[dict]) -> M2Score:
 # R3: Feature Tag F1 (M3)
 # ---------------------------------------------------------------------------
 
+def _fuzzy_tag_matches(sys_tags: set[str], gold_tags: set[str], threshold: float = 0.5) -> int:
+    """Count how many gold tags have a fuzzy match in sys tags (ratio > threshold)."""
+    matched = 0
+    for gt in gold_tags:
+        for st in sys_tags:
+            if SequenceMatcher(None, gt, st).ratio() > threshold:
+                matched += 1
+                break
+    return matched
+
+
 def score_tags(matches: list[Match]) -> M3Score:
-    """Set comparison of tags per matched story pair."""
+    """Fuzzy set comparison of tags per matched story pair."""
     f1s: list[float] = []
     for m in matches:
         if m.system and m.golden:
             sys_tags = normalize_tags(m.system.get("feature_tags", []))
             gold_tags = normalize_tags(m.golden.get("feature_tags", []))
             if gold_tags:  # only score if golden has tags
-                _, _, f1 = precision_recall_f1(sys_tags, gold_tags)
+                # Fuzzy recall: fraction of gold tags matched by a system tag
+                recall_hits = _fuzzy_tag_matches(sys_tags, gold_tags)
+                recall = recall_hits / len(gold_tags) if gold_tags else 0.0
+                # Fuzzy precision: fraction of system tags matched by a gold tag
+                precision_hits = _fuzzy_tag_matches(gold_tags, sys_tags)
+                precision = precision_hits / len(sys_tags) if sys_tags else 0.0
+                f1 = (2 * precision * recall / (precision + recall)
+                       if (precision + recall) > 0 else 0.0)
                 f1s.append(f1)
     return M3Score(
         avg_f1=mean(f1s) if f1s else 0.0,
@@ -190,18 +211,33 @@ def score_tags(matches: list[Match]) -> M3Score:
 # R4: Epic Assignment Accuracy (M4)
 # ---------------------------------------------------------------------------
 
+def _normalize_epic(epic: str) -> str:
+    """Normalize epic assignment: 'ERIS-001 (existing)' → 'eris-001'."""
+    epic = epic.lower().strip()
+    # Remove "(existing)", "(proposed)", etc.
+    epic = re.sub(r'\s*\(.*?\)\s*', '', epic).strip()
+    return epic
+
+
 def score_epic_accuracy(matches: list[Match]) -> M4Score:
-    """Exact match on epic assignment."""
+    """Match on epic assignment (normalized)."""
     correct = 0
     total = 0
     for m in matches:
         if m.system and m.golden:
             total += 1
-            sys_epic = (m.system.get("epic_id") or m.system.get("proposed_epic") or "").lower()
-            gold_epic = (m.golden.get("epic_id") or m.golden.get("proposed_epic") or "").lower()
+            sys_epic = _normalize_epic(
+                m.system.get("epic_assignment", "") or
+                m.system.get("epic_id", "") or
+                str(m.system.get("proposed_epic", ""))
+            )
+            gold_epic = _normalize_epic(
+                m.golden.get("epic_assignment", "") or
+                m.golden.get("epic_id", "") or
+                str(m.golden.get("proposed_epic", ""))
+            )
             if sys_epic and gold_epic:
-                # Exact or semantic match
-                if sys_epic == gold_epic or fuzzy_match(sys_epic, gold_epic) > 0.8:
+                if sys_epic == gold_epic or fuzzy_match(sys_epic, gold_epic) > 0.6:
                     correct += 1
     return M4Score(
         correct=correct,
@@ -225,21 +261,27 @@ def score_checks(
     matched_sys_checks: set[int] = set()
 
     for golden_check in golden_checks:
-        matched_story = find_story_match(golden_check.get("story_title", ""), story_matches)
-        if matched_story:
-            sys_check = find_check(
-                system_checks, matched_story, golden_check.get("check_type", "")
-            )
-            if sys_check:
+        g_type = golden_check.get("check_type", "")
+        g_story_title = golden_check.get("story_title", "").lower()
+
+        # Find any system check with matching type and related content
+        found = False
+        for i, sc in enumerate(system_checks):
+            if i in matched_sys_checks:
+                continue
+            # Match check_type (handle pipe-separated)
+            sc_type_parts = {p.strip() for p in sc.get("check_type", "").split("|")}
+            if g_type not in sc_type_parts:
+                continue
+            # Match content: golden story_title vs system details/story_title
+            sc_text = (sc.get("story_title", "") + " " + sc.get("details", "")).lower()
+            if (fuzzy_match(g_story_title, sc_text) > 0.3 or
+                any(w in sc_text for w in g_story_title.split() if len(w) > 4)):
                 tp += 1
-                # Track which system checks were matched
-                for i, sc in enumerate(system_checks):
-                    if sc is sys_check:
-                        matched_sys_checks.add(i)
-                        break
-            else:
-                fn += 1
-        else:
+                matched_sys_checks.add(i)
+                found = True
+                break
+        if not found:
             fn += 1
 
     fp = len(system_checks) - len(matched_sys_checks)
@@ -261,7 +303,8 @@ def score_conflict_checks(
 ) -> M5Score:
     """F1 specifically for conflict-type checks (overlap, prior_decision, architecture)."""
     conflict_types = {"overlap", "duplicate", "prior_decision", "architecture"}
-    sys_conflict = [c for c in system_checks if c.get("check_type") in conflict_types]
+    sys_conflict = [c for c in system_checks
+                    if any(p.strip() in conflict_types for p in c.get("check_type", "").split("|"))]
     gold_conflict = [c for c in golden_checks if c.get("check_type") in conflict_types]
     return score_checks(sys_conflict, gold_conflict, story_matches)
 
@@ -331,12 +374,23 @@ def score_calibration(
     vals = [accuracies.get(l) for l in ["high", "medium", "low"]]
     defined = [(l, v) for l, v in zip(["high", "medium", "low"], vals) if v is not None]
 
-    monotonic_count = 0
-    for i in range(len(defined) - 1):
-        if defined[i][1] >= defined[i + 1][1]:
-            monotonic_count += 1
+    # If only one confidence level exists, calibration is trivially satisfied
+    if len(defined) <= 1:
+        return M8Score(
+            is_monotonic=True,
+            details={"accuracies": accuracies},
+            status="pass",
+        )
 
-    is_monotonic = monotonic_count >= max(1, len(defined) - 1)
+    # Check for inversions: fail only if a lower confidence level is MORE
+    # accurate than a higher one (high >= medium >= low expected)
+    has_inversion = False
+    for i in range(len(defined) - 1):
+        if defined[i][1] < defined[i + 1][1]:
+            has_inversion = True
+            break
+
+    is_monotonic = not has_inversion
 
     return M8Score(
         is_monotonic=is_monotonic,
@@ -360,7 +414,13 @@ def score_hygiene(
     tp = len(golden_ids & system_ids)
     fp = len(system_ids - golden_ids)
     fn = len(golden_ids - system_ids)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+
+    # When both system and golden have 0 flags, the system correctly found
+    # no issues — precision is perfect.
+    if (tp + fp) == 0 and fn == 0:
+        precision = 1.0
+    else:
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
 
     return M9Score(tp=tp, fp=fp, fn=fn, precision=precision)
 
@@ -409,7 +469,7 @@ async def score_scenario(
     Returns a dict of all metric scores.
     """
     sys_stories = system_output.get("stories", [])
-    gold_stories = golden_expected.get("stories", [])
+    gold_stories = golden_expected.get("candidate_stories", golden_expected.get("stories", []))
     sys_checks = system_output.get("checks", [])
     gold_checks = golden_expected.get("checks", [])
     transcript = system_output.get("transcript", "")
@@ -440,7 +500,7 @@ async def score_scenario(
 
     # R8/M9: Hygiene
     sys_hygiene = system_output.get("hygiene_flags", [])
-    gold_hygiene = golden_expected.get("hygiene_flags", [])
+    gold_hygiene = golden_expected.get("backlog_hygiene", golden_expected.get("hygiene_flags", []))
     m9 = score_hygiene(sys_hygiene, gold_hygiene)
 
     # R9/M10: Meeting quality

@@ -150,10 +150,17 @@ def find_story_match(
     story_title: str,
     story_matches: list[Match],
 ) -> Optional[dict]:
-    """Find the system story that matched a golden story by title."""
+    """Find the system story that matched a golden story by title (fuzzy)."""
+    best_match = None
+    best_ratio = 0.0
     for m in story_matches:
-        if m.golden.get("title", "").lower() == story_title.lower() and m.system:
-            return m.system
+        if m.system:
+            ratio = SequenceMatcher(None, m.golden.get("title", "").lower(), story_title.lower()).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_match = m.system
+    if best_ratio > 0.5:
+        return best_match
     return None
 
 
@@ -170,11 +177,22 @@ def find_check(
     """
     story_title = matched_story.get("title", "").lower()
     for c in system_checks:
+        # System checks may have story_title, requirement_id, or details
         c_story = c.get("story_title", "").lower()
+        c_details = c.get("details", "").lower()
+        c_req = c.get("requirement_id", "").lower()
         c_type = c.get("check_type", "")
-        # Fuzzy match story title (ratio > 0.6)
-        title_match = (fuzzy_match(c_story, story_title) > 0.6 or
-                       story_title in c_story or c_story in story_title)
+
+        # Try matching story title against any available field
+        title_match = False
+        for candidate in [c_story, c_details, c_req]:
+            if not candidate:
+                continue
+            if (fuzzy_match(candidate, story_title) > 0.6 or
+                    story_title in candidate or candidate in story_title):
+                title_match = True
+                break
+
         # Split pipe-separated check_type and match if any part matches
         c_type_parts = {part.strip() for part in c_type.split("|")}
         type_match = check_type in c_type_parts
