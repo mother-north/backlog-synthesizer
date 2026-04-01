@@ -633,15 +633,33 @@ export default function MeetingView() {
                       rowKey="id"
                       pagination={{ pageSize: 20, showTotal: (total) => `${total} checks` }}
                       expandable={{
-                        expandedRowRender: (record) =>
-                          resolvingCheckId === record.id ? (
-                            <CheckPanel
-                              check={record}
-                              onClose={() => setResolvingCheckId(null)}
-                              onResolved={() => { setResolvingCheckId(null); fetchData(); }}
-                            />
-                          ) : null,
-                        expandedRowKeys: resolvingCheckId ? [resolvingCheckId] : [],
+                        expandedRowRender: (record) => (
+                          <div style={{ padding: '8px 0' }}>
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontWeight: 500, marginBottom: 4 }}>Details</div>
+                              <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{record.details || 'No details'}</div>
+                            </div>
+                            {record.proposed_resolution && (
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontWeight: 500, marginBottom: 4 }}>Proposed Resolution</div>
+                                <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{record.proposed_resolution}</div>
+                              </div>
+                            )}
+                            {resolvingCheckId === record.id ? (
+                              <CheckPanel
+                                check={record}
+                                onClose={() => setResolvingCheckId(null)}
+                                onResolved={() => { setResolvingCheckId(null); fetchData(); }}
+                              />
+                            ) : (
+                              canResolve(record.routed_to) && record.status === 'open' && (
+                                <Button type="primary" size="small" onClick={() => setResolvingCheckId(record.id)}>
+                                  Resolve This Check
+                                </Button>
+                              )
+                            )}
+                          </div>
+                        ),
                       }}
                     />
                   </>
