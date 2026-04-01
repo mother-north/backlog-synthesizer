@@ -108,6 +108,7 @@ export const meetingsApi = {
     });
   },
   trigger: (id: number) => api.post(`/meetings/${id}/trigger`),
+  reevaluate: (id: number) => api.post(`/meetings/${id}/reevaluate`),
   getProgress: (id: number) => api.get(`/meetings/${id}/progress`),
   delete: (id: number) => api.delete(`/meetings/${id}`),
 };

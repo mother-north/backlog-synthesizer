@@ -8,6 +8,7 @@ import {
   SearchOutlined,
   EyeOutlined,
   CheckCircleOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi, dataApi } from '../services/api';
@@ -16,7 +17,7 @@ import { useAuthStore } from '../store/auth';
 import StoryCard from '../components/StoryCard';
 import EpicProposal from '../components/EpicProposal';
 import CheckPanel from '../components/CheckPanel';
-import PipelineProgress from '../components/PipelineProgress';
+// PipelineProgress replaced with inline ProcessingStatus
 import ConfirmDialog from '../components/ConfirmDialog';
 
 interface Meeting {
@@ -104,6 +105,61 @@ interface AuditEntry {
 
 function formatStatus(status: string): string {
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+const AGENT_LABELS: Record<string, string> = {
+  parser: 'Extracting requirements',
+  retriever: 'Searching knowledge base',
+  crossref: 'Checking backlog & architecture',
+  synthesizer: 'Generating stories',
+  validator: 'Validating citations',
+};
+const AGENT_ORDER = ['parser', 'retriever', 'crossref', 'synthesizer', 'validator'];
+
+function ProcessingStatus({ meetingId, onComplete }: { meetingId: number; onComplete: () => void }) {
+  const [steps, setSteps] = useState<Array<{ agent: string; status: string; message: string }>>([]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    const poll = async () => {
+      try {
+        const res = await meetingsApi.getById(meetingId);
+        const m = res.data?.rows?.[0] || res.data;
+        const progress = m?.pipeline_progress || [];
+        if (Array.isArray(progress) && progress.length > 0) {
+          setSteps(progress);
+        }
+        if (m?.status && m.status !== 'processing') {
+          clearInterval(timer);
+          onComplete();
+        }
+      } catch { /* ignore */ }
+    };
+    poll();
+    timer = setInterval(poll, 3000);
+    return () => clearInterval(timer);
+  }, [meetingId, onComplete]);
+
+  const doneCount = steps.filter(s => s.status === 'done').length;
+  const runningStep = steps.find(s => s.status === 'running');
+  const total = AGENT_ORDER.length;
+
+  return (
+    <div style={{ background: 'var(--blue-50)', border: '1px solid var(--blue-100)', borderRadius: 8, padding: '12px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
+      <LoadingOutlined spin style={{ fontSize: 18, color: 'var(--primary)' }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>
+          Processing — Step {doneCount + (runningStep ? 1 : 0)}/{total}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-sec)' }}>
+          {runningStep ? (runningStep.message || AGENT_LABELS[runningStep.agent] || runningStep.agent) : (doneCount === 0 ? 'Starting pipeline...' : 'Finishing...')}
+        </div>
+      </div>
+      <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--primary)' }}>
+        {doneCount}/{total} done
+      </div>
+    </div>
+  );
 }
 
 export default function MeetingView() {
@@ -431,7 +487,7 @@ export default function MeetingView() {
         >
           {formatStatus(meeting.status)}
         </Tag>
-        {(meeting.status === 'uploaded' || meeting.status === 'processing') && !isProcessing && (
+        {(meeting.status === 'uploaded') && (
           <Button
             type="primary"
             onClick={async () => {
@@ -447,16 +503,26 @@ export default function MeetingView() {
             Process Meeting
           </Button>
         )}
+        {meeting.status === 'in_review' && (
+          <Button
+            danger
+            onClick={async () => {
+              try {
+                await meetingsApi.reevaluate(meetingId);
+                message.success('Re-evaluation started — all stories and checks cleared');
+                fetchData();
+              } catch {
+                message.error('Failed to start re-evaluation');
+              }
+            }}
+          >
+            Re-evaluate
+          </Button>
+        )}
       </div>
 
-      {/* Pipeline progress */}
-      {isProcessing && (
-        <PipelineProgress
-          meetingId={meetingId}
-          initialSteps={meeting.pipeline_progress as any || undefined}
-          onComplete={fetchData}
-        />
-      )}
+      {/* Pipeline progress — simple polling status */}
+      {isProcessing && <ProcessingStatus meetingId={meetingId} onComplete={fetchData} />}
 
       {/* Tabs */}
       <Tabs

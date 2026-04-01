@@ -163,6 +163,44 @@ router.post('/upload',
 );
 
 // Trigger pipeline (proxy to FastAPI)
+// Re-evaluate: clear all stories/checks and re-trigger pipeline
+router.post('/:id/reevaluate', async (req: AuthRequest, res: Response) => {
+  const meetingId = req.params.id;
+  try {
+    // Clear all associated data
+    await query('DELETE FROM checks WHERE story_id IN (SELECT id FROM stories WHERE meeting_id = $1)', [meetingId]);
+    await query('DELETE FROM stories WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM agent_traces WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM epics WHERE is_proposed = true AND proposed_by_meeting = $1', [meetingId]);
+    await query('DELETE FROM memos WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM backlog_hygiene_flags WHERE meeting_id = $1', [meetingId]);
+    await query('UPDATE meetings SET status = $1, pipeline_progress = NULL, meeting_quality = NULL WHERE id = $2', ['processing', meetingId]);
+
+    // Write to audit log
+    await query(
+      `INSERT INTO audit_log (entity_type, entity_id, action, new_value, user_id)
+       VALUES ('meeting', $1, 'reevaluate', $2, $3)`,
+      [meetingId, JSON.stringify({ cleared_at: new Date().toISOString() }), req.user!.id]
+    );
+
+    // Trigger pipeline
+    const agentsResponse = await fetch(`${config.agentsUrl}/pipeline/run/${meetingId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!agentsResponse.ok) {
+      return res.status(500).json({ error: 'Failed to start pipeline after clearing' });
+    }
+
+    res.json({ message: 'Re-evaluation started', meeting_id: parseInt(meetingId) });
+  } catch (error) {
+    logger.error('Reevaluate error:', error);
+    res.status(500).json({ error: 'Failed to re-evaluate meeting' });
+  }
+});
+
+// Trigger pipeline
 router.post('/:id/trigger', async (req: AuthRequest, res: Response) => {
   const meetingId = req.params.id;
 
