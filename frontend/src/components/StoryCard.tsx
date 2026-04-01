@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tag, Select, Button, Input, Space, Tooltip, App, Table } from 'antd';
+import { Tag, Select, Button, Input, Space, Tooltip, App, Table, Modal, Descriptions } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -8,9 +8,10 @@ import {
   SaveOutlined,
   CloseOutlined,
   ExclamationCircleOutlined,
+  EyeOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
-import { storiesApi } from '../services/api';
+import { storiesApi, dataApi } from '../services/api';
 import { statusColors, groundingColors } from '../theme';
 import CheckPanel from './CheckPanel';
 import ConfirmDialog from './ConfirmDialog';
@@ -66,7 +67,37 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
   const [saving, setSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<'confirm' | 'reject' | 'save' | null>(null);
   const [resolvingCheckId, setResolvingCheckId] = useState<number | null>(null);
+  const [viewBacklogItem, setViewBacklogItem] = useState<any>(null);
   const { message } = App.useApp();
+
+  const fetchBacklogItem = async (externalId: string) => {
+    try {
+      const res = await dataApi.getBacklog({ search: externalId });
+      const items = res.data?.rows || res.data || [];
+      const match = items.find((i: any) => i.external_id === externalId);
+      if (match) setViewBacklogItem(match);
+      else message.warning(`Backlog item ${externalId} not found`);
+    } catch {
+      message.error('Failed to load backlog item');
+    }
+  };
+
+  const renderDetailsWithBacklogLinks = (text: string) => {
+    if (!text) return '-';
+    const parts = text.split(/(ERIS-\d+)/g);
+    return (
+      <span>
+        {parts.map((part, i) =>
+          /^ERIS-\d+$/.test(part) ? (
+            <Tag key={i} color="blue" style={{ margin: 0, cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); fetchBacklogItem(part); }}>
+              {part} <EyeOutlined style={{ fontSize: 10, marginLeft: 2 }} />
+            </Tag>
+          ) : <span key={i}>{part}</span>
+        )}
+      </span>
+    );
+  };
 
   const openChecks = story.checks?.filter(c => c.status === 'open') || [];
   const hasNoEpic = !story.epic_id;
@@ -238,7 +269,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
                     dataIndex: 'details',
                     key: 'details',
                     ellipsis: true,
-                    render: (d: string) => <span style={{ fontSize: 12 }}>{(d || '').slice(0, 100)}{(d || '').length > 100 ? '...' : ''}</span>,
+                    render: (d: string) => <span style={{ fontSize: 12 }}>{renderDetailsWithBacklogLinks((d || '').slice(0, 100) + ((d || '').length > 100 ? '...' : ''))}</span>,
                   },
                   {
                     title: 'Role',
@@ -278,7 +309,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
                     <div style={{ padding: '8px 0' }}>
                       <div style={{ marginBottom: 8 }}>
                         <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12 }}>Full Details</div>
-                        <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{check.details || 'No details'}</div>
+                        <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{renderDetailsWithBacklogLinks(check.details || 'No details')}</div>
                       </div>
                       {check.proposed_resolution && (
                         <div style={{ marginBottom: 8 }}>
@@ -379,6 +410,35 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
             confirmText="Save"
             loading={saving}
           />
+
+          {/* Backlog Item Preview Modal */}
+          <Modal
+            title={viewBacklogItem ? `${viewBacklogItem.external_id}: ${viewBacklogItem.title}` : ''}
+            open={!!viewBacklogItem}
+            onCancel={() => setViewBacklogItem(null)}
+            footer={<Button onClick={() => setViewBacklogItem(null)}>Close</Button>}
+            width={700}
+            destroyOnHidden
+          >
+            {viewBacklogItem && (
+              <Descriptions column={2} bordered size="small" style={{ marginTop: 16 }}>
+                <Descriptions.Item label="ID">{viewBacklogItem.external_id}</Descriptions.Item>
+                <Descriptions.Item label="Type"><Tag color={viewBacklogItem.type === 'epic' ? 'purple' : viewBacklogItem.type === 'bug' ? 'red' : 'blue'}>{viewBacklogItem.type}</Tag></Descriptions.Item>
+                <Descriptions.Item label="Title" span={2}>{viewBacklogItem.title}</Descriptions.Item>
+                <Descriptions.Item label="Description" span={2}>{viewBacklogItem.description || <span style={{ color: 'var(--gray-400)' }}>No description</span>}</Descriptions.Item>
+                <Descriptions.Item label="Epic">{viewBacklogItem.epic_id || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Status"><Tag>{viewBacklogItem.status}</Tag></Descriptions.Item>
+                <Descriptions.Item label="Priority">{viewBacklogItem.priority ? <Tag color={viewBacklogItem.priority === 'critical' ? 'red' : viewBacklogItem.priority === 'high' ? 'orange' : 'blue'}>{viewBacklogItem.priority}</Tag> : '—'}</Descriptions.Item>
+                <Descriptions.Item label="Labels">{viewBacklogItem.labels?.length > 0 ? viewBacklogItem.labels.map((l: string) => <Tag key={l}>{l}</Tag>) : '—'}</Descriptions.Item>
+                <Descriptions.Item label="Acceptance Criteria" span={2}>
+                  {viewBacklogItem.acceptance_criteria?.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>{viewBacklogItem.acceptance_criteria.map((ac: string, i: number) => <li key={i}>{ac}</li>)}</ul>
+                  ) : <span style={{ color: 'var(--gray-400)' }}>None</span>}
+                </Descriptions.Item>
+                <Descriptions.Item label="Dependencies" span={2}>{viewBacklogItem.dependencies?.length > 0 ? viewBacklogItem.dependencies.map((d: string) => <Tag key={d} color="blue">{d}</Tag>) : '—'}</Descriptions.Item>
+              </Descriptions>
+            )}
+          </Modal>
     </div>
   );
 }
