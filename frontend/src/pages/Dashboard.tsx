@@ -102,12 +102,12 @@ export default function Dashboard() {
           { label: 'Confirmed', value: Number(stats.stories?.confirmed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)' },
           { label: 'Rejected', value: Number(stats.stories?.rejected) || 0, icon: <CloseCircleOutlined />, color: 'var(--error)' },
           { label: 'Pending', value: Number(stats.stories?.total || 0) - Number(stats.stories?.confirmed || 0) - Number(stats.stories?.rejected || 0), icon: <ClockCircleOutlined />, color: 'var(--warning)' },
-          { label: 'Avg Review', value: stats.stories?.avg_review_days ? `${Number(stats.stories.avg_review_days).toFixed(1)} days` : '- days', icon: <ClockCircleOutlined />, color: 'var(--accent)' },
+          { label: 'Avg Review (days)', value: stats.stories?.avg_review_days ? Number(stats.stories.avg_review_days).toFixed(1) : '-', icon: <ClockCircleOutlined />, color: 'var(--accent)' },
         ].map(card => (
           <Col span={4} key={card.label} style={{ marginBottom: 8 }}>
             <div className="bs-stat-card">
               <div style={{ color: card.color, marginBottom: 4 }}>{card.icon}</div>
-              <div className="stat-value" style={{ color: card.color, fontSize: typeof card.value === 'string' ? 20 : 28 }}>{card.value}</div>
+              <div className="stat-value" style={{ color: card.color }}>{card.value}</div>
               <div className="stat-label">{card.label}</div>
             </div>
           </Col>
