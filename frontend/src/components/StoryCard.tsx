@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tag, Select, Button, Input, Space, Tooltip, App } from 'antd';
+import { Tag, Select, Button, Input, Space, Tooltip, App, Table } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -281,46 +281,98 @@ export default function StoryCard({ story, epics, expanded, onToggle, onUpdate, 
           {story.checks && story.checks.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text)' }}>
-                Checks ({openChecks.length} open)
+                Checks ({openChecks.length} open, {story.checks.length} total)
               </div>
-              {story.checks.map(check => (
-                <div key={check.id}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '8px 0',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: 13,
-                    }}
-                  >
-                    <Tag color={check.status === 'open' ? 'warning' : check.status === 'resolved' ? 'success' : 'default'}>
-                      {check.check_type}
-                    </Tag>
-                    <span style={{ flex: 1 }}>{check.details}</span>
-                    <Tag>{check.routed_to}</Tag>
-                    <span className="status-badge" style={{
-                      background: `${statusColors[check.status] || 'var(--gray-400)'}20`,
-                      color: statusColors[check.status] || 'var(--gray-400)',
-                    }}>
-                      {check.status}
-                    </span>
-                    {check.status === 'open' && (userRoles.includes('Admin') || userRoles.includes(check.routed_to)) && (
-                      <Button size="small" type="primary" onClick={() => setResolvingCheckId(check.id)}>
-                        Resolve
-                      </Button>
-                    )}
-                  </div>
-                  {resolvingCheckId === check.id && (
-                    <CheckPanel
-                      check={check}
-                      onClose={() => setResolvingCheckId(null)}
-                      onResolved={() => { setResolvingCheckId(null); onUpdate(); }}
-                    />
-                  )}
-                </div>
-              ))}
+              <Table
+                dataSource={story.checks}
+                rowKey="id"
+                size="small"
+                pagination={false}
+                columns={[
+                  {
+                    title: 'ID',
+                    dataIndex: 'id',
+                    key: 'id',
+                    width: 50,
+                    render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)', fontSize: 11 }}>{id}</span>,
+                  },
+                  {
+                    title: 'Type',
+                    dataIndex: 'check_type',
+                    key: 'type',
+                    width: 120,
+                    render: (type: string) => <Tag color="default">{type}</Tag>,
+                  },
+                  {
+                    title: 'Details',
+                    dataIndex: 'details',
+                    key: 'details',
+                    ellipsis: true,
+                    render: (d: string) => <span style={{ fontSize: 12 }}>{(d || '').slice(0, 100)}{(d || '').length > 100 ? '...' : ''}</span>,
+                  },
+                  {
+                    title: 'Role',
+                    dataIndex: 'routed_to',
+                    key: 'role',
+                    width: 90,
+                    render: (role: string) => <Tag color="blue">{role}</Tag>,
+                  },
+                  {
+                    title: 'Status',
+                    dataIndex: 'status',
+                    key: 'status',
+                    width: 90,
+                    render: (status: string) => (
+                      <span className="status-badge" style={{
+                        background: `${statusColors[status] || 'var(--gray-400)'}20`,
+                        color: statusColors[status] || 'var(--gray-400)',
+                      }}>
+                        {status}
+                      </span>
+                    ),
+                  },
+                  {
+                    title: '',
+                    key: 'action',
+                    width: 80,
+                    render: (_: unknown, check: Check) =>
+                      check.status === 'open' && (userRoles.includes('Admin') || userRoles.includes(check.routed_to)) ? (
+                        <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); setResolvingCheckId(check.id); }}>
+                          Resolve
+                        </Button>
+                      ) : null,
+                  },
+                ]}
+                expandable={{
+                  expandedRowRender: (check: Check) => (
+                    <div style={{ padding: '8px 0' }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12 }}>Full Details</div>
+                        <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{check.details || 'No details'}</div>
+                      </div>
+                      {check.proposed_resolution && (
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12 }}>Proposed Resolution</div>
+                          <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{check.proposed_resolution}</div>
+                        </div>
+                      )}
+                      {check.resolution_notes && (
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12 }}>Resolution Notes</div>
+                          <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{check.resolution_notes}</div>
+                        </div>
+                      )}
+                      {resolvingCheckId === check.id && (
+                        <CheckPanel
+                          check={check}
+                          onClose={() => setResolvingCheckId(null)}
+                          onResolved={() => { setResolvingCheckId(null); onUpdate(); }}
+                        />
+                      )}
+                    </div>
+                  ),
+                }}
+              />
             </div>
           )}
 
