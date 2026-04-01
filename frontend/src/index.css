@@ -248,6 +248,7 @@ body {
   font-size: 12px;
   color: var(--text-sec);
   margin-top: 4px;
+  white-space: nowrap;
 }
 
 /* Story card */
