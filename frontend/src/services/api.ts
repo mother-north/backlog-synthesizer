@@ -199,7 +199,7 @@ export const menuAccessApi = {
   getAll: () => api.get('/menu-access'),
   getByRole: (roleId: number) => api.get(`/menu-access/role/${roleId}`),
   bulkUpdate: (roleId: number, access: Array<{ menuPath: string; tabName?: string; allowed: boolean }>) =>
-    api.post('/menu-access/bulk', { roleId, access }),
+    api.put(`/menu-access/role/${roleId}/bulk`, { rules: access }),
   update: (id: number, allowed: boolean) => api.put(`/menu-access/${id}`, { allowed }),
   delete: (id: number) => api.delete(`/menu-access/${id}`),
 };
