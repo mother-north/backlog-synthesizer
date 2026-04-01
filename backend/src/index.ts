@@ -45,7 +45,11 @@ import { authenticateToken } from './middleware/auth.js';
 app.get('/api/access-log', authenticateToken, async (_req, res) => {
   try {
     const result = await (await import('./config/database.js')).query(
-      `SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 100`
+      `SELECT a.*, u.email as user_email
+       FROM audit_log a
+       LEFT JOIN users u ON u.id = a.user_id
+       ORDER BY a.created_at DESC
+       LIMIT 500`
     );
     res.json({ rows: result.rows, total: result.rowCount });
   } catch { res.json({ rows: [], total: 0 }); }
@@ -56,6 +60,12 @@ app.post('/api/access-log', authenticateToken, async (req: any, res) => {
       `INSERT INTO audit_log (entity_type, entity_id, action, new_value, user_id) VALUES ('access', 0, 'page_view', $1, $2)`,
       [JSON.stringify(req.body), req.user?.id]
     );
+    res.json({ ok: true });
+  } catch { res.json({ ok: true }); }
+});
+app.delete('/api/access-log', authenticateToken, async (_req, res) => {
+  try {
+    await (await import('./config/database.js')).query('DELETE FROM audit_log');
     res.json({ ok: true });
   } catch { res.json({ ok: true }); }
 });

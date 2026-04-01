@@ -81,6 +81,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
       { key: '/settings/users', label: 'Users', icon: createElement(TeamOutlined) },
       { key: '/settings/roles', label: 'Roles', icon: createElement(SafetyCertificateOutlined) },
       { key: '/settings/access', label: 'Access Control', icon: createElement(LockOutlined) },
+      { key: '/settings/access-log', label: 'Activity Log', icon: createElement(UnorderedListOutlined) },
     ],
   },
 ];

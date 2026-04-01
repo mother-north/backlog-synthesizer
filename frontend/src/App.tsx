@@ -16,6 +16,7 @@ import ArchitectureData from './pages/data/ArchitectureData';
 import Users from './pages/settings/Users';
 import Roles from './pages/settings/Roles';
 import AccessControl from './pages/settings/AccessControl';
+import AccessLog from './pages/settings/AccessLog';
 
 function App() {
   const { initializeAuth, isLoading } = useAuthStore();
@@ -55,6 +56,7 @@ function App() {
         <Route path="settings/users" element={<Users />} />
         <Route path="settings/roles" element={<Roles />} />
         <Route path="settings/access" element={<AccessControl />} />
+        <Route path="settings/access-log" element={<AccessLog />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
