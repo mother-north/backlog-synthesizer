@@ -693,17 +693,6 @@ export default function MeetingView() {
                         },
                       },
                       {
-                        title: 'Confidence',
-                        dataIndex: 'confidence',
-                        key: 'confidence',
-                        width: 100,
-                        filters: [{ text: 'high', value: 'high' }, { text: 'medium', value: 'medium' }, { text: 'low', value: 'low' }],
-                        onFilter: (value, record) => record.confidence === value,
-                        render: (conf: string) => (
-                          <Tag color={conf === 'high' ? 'green' : conf === 'medium' ? 'orange' : 'red'}>{conf}</Tag>
-                        ),
-                      },
-                      {
                         title: 'Open Checks',
                         key: 'open_checks',
                         width: 110,
