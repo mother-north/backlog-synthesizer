@@ -5,9 +5,10 @@ import { kbApi } from '../services/api';
 
 interface SearchResult {
   id: number;
-  content_type: string;
-  content_text: string;
-  similarity: number;
+  type: string;
+  text: string;
+  score: number;
+  source: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -20,9 +21,11 @@ const CONTENT_TYPES = [
 
 const TYPE_ICONS: Record<string, string> = {
   meeting_summary: 'Meeting Summary',
+  meeting: 'Meeting',
   decision: 'Decision',
   story: 'Story',
   architecture: 'Architecture',
+  backlog_item: 'Backlog Item',
 };
 
 export default function KnowledgeBase() {
@@ -97,9 +100,9 @@ export default function KnowledgeBase() {
         <Empty description="No results found for your search" />
       ) : (
         <div>
-          {results.map(result => (
+          {results.map((result, index) => (
             <div
-              key={result.id}
+              key={`${result.source}-${result.type}-${result.id}-${index}`}
               style={{
                 background: 'var(--white)',
                 border: '1px solid var(--border)',
@@ -109,13 +112,16 @@ export default function KnowledgeBase() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <Tag color="blue">{TYPE_ICONS[result.content_type] || result.content_type}</Tag>
+                <Tag color="blue">{TYPE_ICONS[result.type] || result.type}</Tag>
+                {result.metadata?.title && (
+                  <span style={{ fontWeight: 500, color: 'var(--text)' }}>{String(result.metadata.title)}</span>
+                )}
                 <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
-                  {Math.round(result.similarity * 100)}% match
+                  {result.score != null && !isNaN(result.score) ? `${Math.round(result.score * 100)}%` : ''} match
                 </span>
               </div>
               <p style={{ color: 'var(--text)', lineHeight: 1.6, margin: 0, fontSize: 14 }}>
-                {result.content_text?.slice(0, 300)}{result.content_text?.length > 300 ? '...' : ''}
+                {result.text?.slice(0, 300)}{result.text?.length > 300 ? '...' : ''}
               </p>
             </div>
           ))}
