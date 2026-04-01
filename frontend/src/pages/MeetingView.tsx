@@ -619,17 +619,7 @@ export default function MeetingView() {
                   </div>
                 )}
 
-                {/* Proposed epics */}
-                {proposedEpics.map(epic => (
-                  <EpicProposal
-                    key={epic.id}
-                    epic={epic}
-                    existingEpics={existingEpics}
-                    onUpdate={fetchData}
-                  />
-                ))}
-
-                {/* Stories table grouped by epic */}
+                {/* Stories table */}
                 {storiesWithChecks.length === 0 ? (
                   <Empty description={isProcessing ? "Stories will appear after processing completes" : "No stories generated for this meeting"} />
                 ) : (
@@ -764,7 +754,14 @@ export default function MeetingView() {
                   <Empty description="No epics found. Upload backlog data to seed epics, or run the pipeline to generate epic proposals." />
                 ) : (
                   <Table
-                    dataSource={epics}
+                    dataSource={[...epics].sort((a, b) => {
+                      // Proposed first, then by story count in this meeting
+                      if (a.is_proposed && !b.is_proposed) return -1;
+                      if (!a.is_proposed && b.is_proposed) return 1;
+                      const aCount = storiesWithChecks.filter(s => s.epic_id === a.id).length;
+                      const bCount = storiesWithChecks.filter(s => s.epic_id === b.id).length;
+                      return bCount - aCount;
+                    })}
                     rowKey="id"
                     pagination={false}
                     size="middle"
