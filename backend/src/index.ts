@@ -40,6 +40,26 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/data', dataLoadRoutes);
 
+// ── Access log (simple audit endpoint) ──────────
+import { authenticateToken } from './middleware/auth.js';
+app.get('/api/access-log', authenticateToken, async (_req, res) => {
+  try {
+    const result = await (await import('./config/database.js')).query(
+      `SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 100`
+    );
+    res.json({ rows: result.rows, total: result.rowCount });
+  } catch { res.json({ rows: [], total: 0 }); }
+});
+app.post('/api/access-log', authenticateToken, async (req: any, res) => {
+  try {
+    await (await import('./config/database.js')).query(
+      `INSERT INTO audit_log (entity_type, entity_id, action, new_value, user_id) VALUES ('access', 0, 'page_view', $1, $2)`,
+      [JSON.stringify(req.body), req.user?.id]
+    );
+    res.json({ ok: true });
+  } catch { res.json({ ok: true }); }
+});
+
 // ── Pipeline proxy (all /api/pipeline/* → FastAPI) ──────────
 app.all('/api/pipeline/*', async (req, res) => {
   const targetPath = req.originalUrl.replace('/api/pipeline', '');

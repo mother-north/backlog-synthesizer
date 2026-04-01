@@ -14,15 +14,14 @@ import { checksApi } from '../services/api';
 import { useAuthStore } from '../store/auth';
 
 interface Action {
-  id: number;
-  check_type: string;
-  story_title?: string;
+  type: string;
+  item: string;
   story_id?: number;
+  check_id?: number;
   meeting_id: number;
-  meeting_title?: string;
+  meeting: string;
   created_at: string;
   routed_to: string;
-  status: string;
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -54,34 +53,34 @@ export default function ActionList() {
   }, [message]);
 
   const filtered = actions.filter(a => {
-    if (typeFilter !== 'all' && a.check_type !== typeFilter) return false;
+    if (typeFilter !== 'all' && a.type !== typeFilter) return false;
     if (meetingFilter !== 'all' && String(a.meeting_id) !== meetingFilter) return false;
     return true;
   });
 
-  const meetingOptions = Array.from(new Map(actions.map(a => [a.meeting_id, a.meeting_title || `Meeting ${a.meeting_id}`])));
+  const meetingOptions = Array.from(new Map(actions.map(a => [a.meeting_id, a.meeting || `Meeting ${a.meeting_id}`])));
 
   const columns: ColumnsType<Action> = [
     {
       title: 'Type',
-      dataIndex: 'check_type',
+      dataIndex: 'type',
       key: 'type',
       render: (type: string) => (
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {TYPE_ICONS[type] || <WarningOutlined />}
-          <span>{type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+          <span>{(type || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</span>
         </span>
       ),
     },
     {
       title: 'Story / Item',
-      dataIndex: 'story_title',
+      dataIndex: 'item',
       key: 'story',
       render: (title: string) => <span style={{ fontWeight: 500 }}>{title || '-'}</span>,
     },
     {
       title: 'Meeting',
-      dataIndex: 'meeting_title',
+      dataIndex: 'meeting',
       key: 'meeting',
     },
     {
@@ -123,9 +122,9 @@ export default function ActionList() {
           style={{ width: 180 }}
           options={[
             { value: 'all', label: 'Type: All' },
-            ...Array.from(new Set(actions.map(a => a.check_type))).map(t => ({
+            ...Array.from(new Set(actions.map(a => a.type).filter(Boolean))).map(t => ({
               value: t,
-              label: t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+              label: (t || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
             })),
           ]}
         />
