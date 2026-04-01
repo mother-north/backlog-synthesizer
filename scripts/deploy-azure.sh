@@ -1,0 +1,415 @@
+#!/bin/bash
+# =============================================================================
+# Backlog Synthesizer Deploy Script — Azure App Service
+# Webapp:         backlog-synthesizer
+# Resource Group: VG-console
+#
+# Usage:
+#   ./scripts/deploy-azure.sh              # interactive prompt for data transfer
+#   ./scripts/deploy-azure.sh --with-data  # always transfer data, no prompt
+#   ./scripts/deploy-azure.sh --code-only  # skip data transfer, no prompt
+#
+# Prerequisites:
+#   brew install azure-cli jq
+#   az login
+# =============================================================================
+
+set -e
+
+SUBSCRIPTION_ID="80a7948e-60eb-4f6d-b970-53bb6d8e5639"
+WEBAPP_NAME="backlog-synthesizer"
+RESOURCE_GROUP="VG-console"
+DB_SERVER_NAME="backlog-synthesizer-db"
+DB_NAME="backlog_synthesizer_db"
+DB_ADMIN_USER="bsadmin"
+DB_ADMIN_PASSWORD="BacklogSynth2026!"
+LOCAL_DB="backlog_synthesizer_db"
+LOCAL_DB_USER="evgeny.ponomarenko"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+echo ""
+echo -e "${CYAN}============================================${NC}"
+echo -e "${CYAN} Backlog Synthesizer Deploy → Azure${NC}"
+echo -e "${CYAN} ${WEBAPP_NAME} / ${RESOURCE_GROUP}${NC}"
+echo -e "${CYAN}============================================${NC}"
+echo ""
+
+# ─── Parse args ────────────────────────────────────────────────────────────────
+WITH_DATA=false
+_SKIP_PROMPT=false
+for arg in "$@"; do
+  [[ "$arg" == "--with-data" ]] && WITH_DATA=true  && _SKIP_PROMPT=true
+  [[ "$arg" == "--code-only" ]] && WITH_DATA=false && _SKIP_PROMPT=true
+done
+
+if [[ "$_SKIP_PROMPT" == "false" ]]; then
+  read -r -p " Transfer local PostgreSQL data to server? [y/N] " _ans
+  [[ "$_ans" =~ ^[Yy]$ ]] && WITH_DATA=true
+fi
+
+if $WITH_DATA; then
+  echo -e " ${YELLOW}Mode: CODE + DATA${NC}"
+else
+  echo -e " ${GREEN}Mode: CODE ONLY${NC}"
+fi
+echo ""
+
+# ─── 0. Check prerequisites ────────────────────────────────────────────────────
+echo -e "${YELLOW}[0/6] Checking prerequisites...${NC}"
+
+if ! command -v az &>/dev/null; then
+  echo -e "    ${RED}ERROR: Azure CLI not found. Install with: brew install azure-cli${NC}"
+  exit 1
+fi
+
+if ! command -v jq &>/dev/null; then
+  echo -e "    ${RED}ERROR: jq not found. Install with: brew install jq${NC}"
+  exit 1
+fi
+
+if ! az account show &>/dev/null; then
+  echo -e "    ${YELLOW}Not logged in to Azure. Logging in...${NC}"
+  az login
+fi
+
+az account set --subscription "$SUBSCRIPTION_ID" 2>/dev/null || {
+  echo -e "    ${YELLOW}Subscription not found. Logging in again...${NC}"
+  az login
+  az account set --subscription "$SUBSCRIPTION_ID"
+}
+
+SUBSCRIPTION=$(az account show --query "name" -o tsv)
+echo -e "    ${GREEN}✓ Azure: ${SUBSCRIPTION}${NC}"
+
+# ─── 1. Build locally ──────────────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}[1/6] Building locally...${NC}"
+cd "$PROJECT_DIR"
+
+npm install --quiet
+npm run build
+echo -e "    ${GREEN}✓ Build complete${NC}"
+
+# ─── 2. Provision PostgreSQL (skip if exists) ─────────────────────────────────
+echo ""
+echo -e "${YELLOW}[2/6] Provisioning Azure PostgreSQL...${NC}"
+
+DB_EXISTS=$(az postgres flexible-server show \
+  --name "$DB_SERVER_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "name" -o tsv 2>/dev/null || echo "")
+
+if [[ -z "$DB_EXISTS" ]]; then
+  echo -e "    ${YELLOW}Creating PostgreSQL Flexible Server '${DB_SERVER_NAME}'...${NC}"
+  echo -e "    ${CYAN}(this takes 3-5 minutes)${NC}"
+
+  WEBAPP_LOCATION=$(az webapp show \
+    --name "$WEBAPP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "location" -o tsv 2>/dev/null || echo "eastus")
+
+  az postgres flexible-server create \
+    --name "$DB_SERVER_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --location "$WEBAPP_LOCATION" \
+    --admin-user "$DB_ADMIN_USER" \
+    --admin-password "$DB_ADMIN_PASSWORD" \
+    --sku-name "Standard_B1ms" \
+    --tier "Burstable" \
+    --storage-size 32 \
+    --version 16 \
+    --public-access "0.0.0.0" \
+    --output none
+
+  echo -e "    ${GREEN}✓ PostgreSQL server created${NC}"
+else
+  echo -e "    ${GREEN}✓ PostgreSQL server already exists${NC}"
+fi
+
+# Enable pgvector extension
+az postgres flexible-server parameter set \
+  --server-name "$DB_SERVER_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --name azure.extensions \
+  --value "vector,pg_trgm" \
+  --output none 2>/dev/null || true
+echo -e "    ${CYAN}pgvector + pg_trgm extensions enabled${NC}"
+
+# Ensure database exists
+DB_NAME_EXISTS=$(az postgres flexible-server db show \
+  --server-name "$DB_SERVER_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --database-name "$DB_NAME" \
+  --query "name" -o tsv 2>/dev/null || echo "")
+
+if [[ -z "$DB_NAME_EXISTS" ]]; then
+  echo -e "    ${YELLOW}Creating database '${DB_NAME}'...${NC}"
+  az postgres flexible-server db create \
+    --server-name "$DB_SERVER_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --database-name "$DB_NAME" \
+    --output none
+  echo -e "    ${GREEN}✓ Database '${DB_NAME}' created${NC}"
+else
+  echo -e "    ${GREEN}✓ Database '${DB_NAME}' already exists${NC}"
+fi
+
+# Firewall rules
+MY_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "")
+az postgres flexible-server firewall-rule create \
+  --name "$DB_SERVER_NAME" --resource-group "$RESOURCE_GROUP" \
+  --rule-name "AllowAzureServices" \
+  --start-ip-address "0.0.0.0" --end-ip-address "0.0.0.0" \
+  --output none 2>/dev/null || true
+if [[ -n "$MY_IP" ]]; then
+  az postgres flexible-server firewall-rule create \
+    --name "$DB_SERVER_NAME" --resource-group "$RESOURCE_GROUP" \
+    --rule-name "AllowDeployMac" \
+    --start-ip-address "$MY_IP" --end-ip-address "$MY_IP" \
+    --output none 2>/dev/null || true
+  echo -e "    ${CYAN}Firewall: allowed local Mac ($MY_IP)${NC}"
+fi
+
+DB_HOST="${DB_SERVER_NAME}.postgres.database.azure.com"
+echo -e "    ${GREEN}✓ DB host: ${DB_HOST}${NC}"
+
+# ─── 3. Configure App Settings ─────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}[3/6] Configuring Azure App Settings...${NC}"
+
+EXISTING_ACCESS_SECRET=$(az webapp config appsettings list \
+  --name "$WEBAPP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "[?name=='JWT_ACCESS_SECRET'].value" -o tsv 2>/dev/null || echo "")
+
+if [[ -z "$EXISTING_ACCESS_SECRET" ]]; then
+  JWT_ACCESS_SECRET=$(openssl rand -hex 32)
+  JWT_REFRESH_SECRET=$(openssl rand -hex 32)
+else
+  JWT_ACCESS_SECRET="$EXISTING_ACCESS_SECRET"
+  JWT_REFRESH_SECRET=$(az webapp config appsettings list \
+    --name "$WEBAPP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "[?name=='JWT_REFRESH_SECRET'].value" -o tsv)
+  echo -e "    ${CYAN}Reusing existing JWT secrets${NC}"
+fi
+
+# Get OPENAI_API_KEY from local .env
+LOCAL_OPENAI_KEY=$(grep "^OPENAI_API_KEY=" "$PROJECT_DIR/agents/.env" 2>/dev/null | cut -d= -f2- || echo "")
+
+WEBAPP_URL=$(az webapp show \
+  --name "$WEBAPP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "defaultHostName" -o tsv 2>/dev/null || echo "${WEBAPP_NAME}.azurewebsites.net")
+
+az webapp config appsettings set \
+  --name "$WEBAPP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --settings \
+    NODE_ENV=production \
+    PORT=8080 \
+    SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+    ENABLE_ORYX_BUILD=true \
+    JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
+    JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
+    JWT_ACCESS_EXPIRY=15m \
+    JWT_REFRESH_EXPIRY=7d \
+    JWT_REFRESH_EXPIRY_REMEMBER=30d \
+    PG_HOST="$DB_HOST" \
+    PG_PORT=5432 \
+    PG_DATABASE="$DB_NAME" \
+    PG_USER="$DB_ADMIN_USER" \
+    PG_PASSWORD="$DB_ADMIN_PASSWORD" \
+    PG_SSL=true \
+    OPENAI_API_KEY="$LOCAL_OPENAI_KEY" \
+    AGENTS_URL="http://localhost:8000" \
+    CLIENT_URL="https://${WEBAPP_URL}" \
+    ADMIN_EMAIL="admin@backlog-synthesizer.com" \
+    ADMIN_PASSWORD="admin" \
+  --output none
+
+echo -e "    ${GREEN}✓ App settings configured${NC}"
+
+az webapp config set \
+  --name "$WEBAPP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --startup-file "node backend/dist/index.js" \
+  --output none
+
+echo -e "    ${GREEN}✓ Startup command: node backend/dist/index.js${NC}"
+
+# ─── 4. Package & Deploy ──────────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}[4/6] Packaging and deploying to Azure...${NC}"
+
+cd "$PROJECT_DIR"
+
+find . -name "._*" -delete 2>/dev/null || true
+find . -name ".DS_Store" -delete 2>/dev/null || true
+
+ZIP_FILE="/tmp/backlog-synthesizer-deploy.zip"
+rm -f "$ZIP_FILE"
+
+STAGE_DIR=$(mktemp -d)
+mkdir -p "$STAGE_DIR/backend" "$STAGE_DIR/frontend" "$STAGE_DIR/agents"
+
+cp -r backend/dist "$STAGE_DIR/backend/dist"
+cp -r frontend/dist "$STAGE_DIR/frontend/dist"
+cp -r backend/sql "$STAGE_DIR/sql"
+
+# Copy agents (Python)
+cp -r agents/*.py "$STAGE_DIR/agents/" 2>/dev/null || true
+cp -r agents/pipeline "$STAGE_DIR/agents/pipeline"
+cp -r agents/tools "$STAGE_DIR/agents/tools"
+cp -r agents/models "$STAGE_DIR/agents/models"
+cp -r agents/eval "$STAGE_DIR/agents/eval"
+cp agents/requirements.txt "$STAGE_DIR/agents/"
+
+# Root package.json (prod deps only)
+python3 -c "
+import json
+with open('backend/package.json') as f:
+    pkg = json.load(f)
+pkg.get('scripts', {}).pop('build', None)
+pkg.get('scripts', {}).pop('dev', None)
+pkg.get('devDependencies', {}).clear()
+with open('$STAGE_DIR/package.json', 'w') as f:
+    json.dump(pkg, f, indent=2)
+"
+
+cd "$STAGE_DIR"
+zip -r "$ZIP_FILE" . -x "*.DS_Store" -x "._*" -q
+cd "$PROJECT_DIR"
+rm -rf "$STAGE_DIR"
+
+ZIP_SIZE=$(du -h "$ZIP_FILE" | cut -f1)
+echo -e "    ${GREEN}✓ ZIP created: ${ZIP_SIZE}${NC}"
+
+echo -e "    ${YELLOW}Deploying to Azure (may take 2-3 minutes)...${NC}"
+az webapp deploy \
+  --name "$WEBAPP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --src-path "$ZIP_FILE" \
+  --type zip \
+  --restart true \
+  --async false \
+  --output none
+
+rm -f "$ZIP_FILE"
+echo -e "    ${GREEN}✓ Code deployed${NC}"
+
+# ─── 5. Run DB seed ───────────────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}[5/6] Running DB seed...${NC}"
+
+PG_BIN=$(command -v psql 2>/dev/null || ls /opt/homebrew/opt/postgresql@*/bin/psql 2>/dev/null | sort -V | tail -1 || echo "")
+if [[ -n "$PG_BIN" ]]; then
+  echo -e "    ${YELLOW}Applying schema via psql...${NC}"
+  PGPASSWORD="$DB_ADMIN_PASSWORD" "$PG_BIN" \
+    "postgresql://${DB_ADMIN_USER}@${DB_HOST}:5432/${DB_NAME}?sslmode=require" \
+    -f "$PROJECT_DIR/backend/sql/init.sql" -q 2>&1 | grep -v "^$" | grep -v "already exists" || true
+  echo -e "    ${GREEN}✓ Schema applied${NC}"
+
+  # Seed via Kudu
+  KUDU_HOST=$(echo "$WEBAPP_URL" | sed 's/\.azurewebsites\.net/\.scm.azurewebsites.net/')
+  KUDU_TOKEN=$(az account get-access-token --query accessToken -o tsv)
+
+  echo -e "    ${YELLOW}Waiting 25 seconds for app to start...${NC}"
+  sleep 25
+
+  SEED_RESULT=$(curl -s \
+    -H "Authorization: Bearer $KUDU_TOKEN" \
+    -X POST "https://${KUDU_HOST}/api/command" \
+    -H "Content-Type: application/json" \
+    -d '{"command": "bash -c \"node backend/dist/seed.js 2>&1 | tail -5\"", "dir": "/home/site/wwwroot"}')
+  echo -e "    $(echo "$SEED_RESULT" | jq -r '.Output // .Error // "no output"' 2>/dev/null)"
+  echo -e "    ${GREEN}✓ Seed complete${NC}"
+else
+  echo -e "    ${YELLOW}psql not found — run seed manually after deploy${NC}"
+fi
+
+# ─── 6. (Optional) Transfer data ──────────────────────────────────────────────
+if $WITH_DATA; then
+  echo ""
+  echo -e "${YELLOW}[6/6] Transferring local PostgreSQL data...${NC}"
+
+  PG_DUMP=$(command -v pg_dump 2>/dev/null || \
+            ls /opt/homebrew/opt/postgresql@*/bin/pg_dump 2>/dev/null | sort -V | tail -1 || \
+            echo "")
+  if [[ -z "$PG_DUMP" ]]; then
+    echo -e "    ${RED}ERROR: pg_dump not found${NC}"
+    exit 1
+  fi
+  PG_CLIENT=$(dirname "$PG_DUMP")/psql
+
+  DUMP_FILE="/tmp/bs_data_$(date +%Y%m%d_%H%M%S).sql"
+
+  "$PG_DUMP" -U "$LOCAL_DB_USER" \
+    --data-only \
+    --table=users \
+    --table=roles \
+    --table=menu_access \
+    --table=meetings \
+    --table=backlog_items \
+    --table=architecture_docs \
+    --table=stories \
+    --table=checks \
+    --table=epics \
+    --table=decisions \
+    --table=memos \
+    --table=backlog_hygiene_flags \
+    --table=agent_traces \
+    --table=audit_log \
+    --table=kb_embeddings \
+    "$LOCAL_DB" > "$DUMP_FILE"
+
+  DUMP_SIZE=$(du -h "$DUMP_FILE" | cut -f1)
+  echo -e "    ${GREEN}✓ Dump: ${DUMP_FILE} (${DUMP_SIZE})${NC}"
+
+  echo -e "    ${YELLOW}Truncating & restoring data on Azure DB...${NC}"
+  PGPASSWORD="$DB_ADMIN_PASSWORD" "$PG_CLIENT" \
+    "postgresql://${DB_ADMIN_USER}@${DB_HOST}:5432/${DB_NAME}?sslmode=require" \
+    -c "TRUNCATE TABLE audit_log, agent_traces, kb_embeddings, backlog_hygiene_flags, memos, decisions, checks, stories, epics, architecture_docs, backlog_items, meetings, menu_access, users, roles RESTART IDENTITY CASCADE;" -q
+
+  PGPASSWORD="$DB_ADMIN_PASSWORD" "$PG_CLIENT" \
+    "postgresql://${DB_ADMIN_USER}@${DB_HOST}:5432/${DB_NAME}?sslmode=require" \
+    -f "$DUMP_FILE" -q
+
+  rm "$DUMP_FILE"
+  echo -e "    ${GREEN}✓ Data restored${NC}"
+fi
+
+# ─── Done ─────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}Testing application...${NC}"
+sleep 5
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${WEBAPP_URL}/api/health" --max-time 15 || echo "000")
+if [[ "$HTTP_STATUS" == "200" ]]; then
+  echo -e "    ${GREEN}✓ Health check passed (HTTP ${HTTP_STATUS})${NC}"
+elif [[ "$HTTP_STATUS" == "000" ]]; then
+  echo -e "    ${YELLOW}⏳ App still starting (timeout) — check logs${NC}"
+else
+  echo -e "    ${YELLOW}⚠ Health check returned HTTP ${HTTP_STATUS}${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}============================================${NC}"
+echo -e "${GREEN} Deploy complete!${NC}"
+echo ""
+echo -e " App:  ${CYAN}https://${WEBAPP_URL}${NC}"
+echo " DB:   ${DB_HOST}"
+echo ""
+echo -e " Useful commands:"
+echo -e "   Logs:    ${YELLOW}az webapp log tail --name ${WEBAPP_NAME} --resource-group ${RESOURCE_GROUP}${NC}"
+echo -e "   SSH:     ${YELLOW}az webapp ssh --name ${WEBAPP_NAME} --resource-group ${RESOURCE_GROUP}${NC}"
+echo -e "   Restart: ${YELLOW}az webapp restart --name ${WEBAPP_NAME} --resource-group ${RESOURCE_GROUP}${NC}"
+echo -e "${GREEN}============================================${NC}"
