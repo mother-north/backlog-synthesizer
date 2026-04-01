@@ -3,11 +3,37 @@ import { query } from '../config/database.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import OpenAI from 'openai';
 
 const router = Router();
 router.use(authenticateToken);
 
-// Search knowledge base (proxies to FastAPI for vector search, falls back to text search)
+// OpenAI client for embeddings
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI | null {
+  if (!config.openaiApiKey) return null;
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+  }
+  return openaiClient;
+}
+
+async function getEmbedding(text: string): Promise<number[] | null> {
+  const client = getOpenAI();
+  if (!client) return null;
+  try {
+    const resp = await client.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text,
+    });
+    return resp.data[0].embedding;
+  } catch (e) {
+    logger.error('Embedding generation failed:', e);
+    return null;
+  }
+}
+
+// Search knowledge base — semantic (pgvector) + full-text on meetings
 router.post('/search', async (req: AuthRequest, res: Response) => {
   const { query: q, content_types: contentTypes, limit: limitParam } = req.body;
 
@@ -16,35 +42,47 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
   }
 
   const searchLimit = parseInt(limitParam as string) || 20;
+  const results: any[] = [];
 
   try {
-    // Try FastAPI vector search first
-    try {
-      const agentsResponse = await fetch(
-        `${config.agentsUrl}/kb/search`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: q, content_types: contentTypes, limit: searchLimit }),
-        }
-      );
+    // 1. Semantic search on kb_embeddings via pgvector
+    const embedding = await getEmbedding(q);
+    if (embedding) {
+      try {
+        const typeFilter = contentTypes && contentTypes.length > 0
+          ? `AND content_type = ANY($3)`
+          : '';
+        const vecParams: any[] = [JSON.stringify(embedding), searchLimit];
+        if (contentTypes && contentTypes.length > 0) vecParams.push(contentTypes);
 
-      if (agentsResponse.ok) {
-        const data = await agentsResponse.json();
-        return res.json(data);
+        const kbResults = await query(
+          `SELECT id, content_type, content_id, LEFT(content_text, 300) as content_text, metadata,
+                  1 - (embedding <=> $1::vector) as score
+           FROM kb_embeddings
+           WHERE embedding IS NOT NULL ${typeFilter}
+           ORDER BY embedding <=> $1::vector
+           LIMIT $2`,
+          vecParams
+        );
+        for (const r of kbResults.rows) {
+          results.push({
+            type: r.content_type,
+            id: r.content_id,
+            text: r.content_text,
+            metadata: r.metadata,
+            score: parseFloat(r.score) || 0,
+            source: 'semantic',
+          });
+        }
+      } catch (e) {
+        logger.debug('pgvector search failed (table may be empty):', e);
       }
-    } catch {
-      // FastAPI not available, fall back to text search
-      logger.debug('KB vector search unavailable, falling back to text search');
     }
 
-    // Fallback: search meetings by full-text + KB embeddings by ILIKE
-    const results: any[] = [];
-
-    // Search meetings by full-text search
+    // 2. Full-text search on meeting transcripts
     try {
       const meetingResults = await query(
-        `SELECT id, title, LEFT(transcript, 200) as snippet, created_at,
+        `SELECT id, title, LEFT(transcript, 300) as snippet, created_at,
                 ts_rank(transcript_tsvector, plainto_tsquery('english', $1)) as score
          FROM meetings
          WHERE transcript_tsvector @@ plainto_tsquery('english', $1)
@@ -53,46 +91,46 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
         [q, searchLimit]
       );
       for (const r of meetingResults.rows) {
-        results.push({
-          type: 'meeting',
-          id: r.id,
-          text: r.snippet,
-          metadata: { title: r.title, created_at: r.created_at },
-          score: parseFloat(r.score) || 0,
-          source: 'meetings',
-        });
+        // Avoid duplicates if meeting was also in kb_embeddings
+        if (!results.some(x => x.type === 'meeting' && x.id === r.id)) {
+          results.push({
+            type: 'meeting',
+            id: r.id,
+            text: r.snippet,
+            metadata: { title: r.title, created_at: r.created_at },
+            score: parseFloat(r.score) || 0,
+            source: 'full_text',
+          });
+        }
       }
-    } catch { /* meetings search failed, continue */ }
+    } catch { /* full-text search failed, continue */ }
 
-    // Search KB embeddings by ILIKE (simpler than trigram, always works)
+    // 3. Also search stories by title/description (for confirmed stories)
     try {
-      const typeFilter = contentTypes && contentTypes.length > 0
-        ? `AND content_type = ANY($3)`
-        : '';
-      const kbParams: any[] = [`%${q}%`, searchLimit];
-      if (contentTypes && contentTypes.length > 0) kbParams.push(contentTypes);
-
-      const kbResults = await query(
-        `SELECT id, content_type, content_id, LEFT(content_text, 200) as content_text, metadata
-         FROM kb_embeddings
-         WHERE content_text ILIKE $1 ${typeFilter}
-         ORDER BY id DESC
-         LIMIT $2`,
-        kbParams
+      const storyResults = await query(
+        `SELECT s.id, s.title, LEFT(s.description, 200) as description, s.type, s.status,
+                s.meeting_id, m.title as meeting_title,
+                similarity(s.title, $1) as score
+         FROM stories s
+         JOIN meetings m ON s.meeting_id = m.id
+         WHERE s.title ILIKE $2 OR s.description ILIKE $2
+         ORDER BY score DESC
+         LIMIT $3`,
+        [q, `%${q}%`, searchLimit]
       );
-      for (const r of kbResults.rows) {
+      for (const r of storyResults.rows) {
         results.push({
-          type: r.content_type,
-          id: r.content_id,
-          text: r.content_text,
-          metadata: r.metadata,
-          score: 0.5,
-          source: 'kb_embeddings',
+          type: 'story',
+          id: r.id,
+          text: `[${r.type}] ${r.title}: ${r.description || ''}`,
+          metadata: { meeting_title: r.meeting_title, meeting_id: r.meeting_id, status: r.status },
+          score: parseFloat(r.score) || 0.3,
+          source: 'stories',
         });
       }
-    } catch { /* KB search failed, continue */ }
+    } catch { /* story search failed, continue */ }
 
-    // Sort by score descending
+    // Sort by score descending, deduplicate
     results.sort((a, b) => b.score - a.score);
 
     res.json({ results: results.slice(0, searchLimit), total: results.length });
