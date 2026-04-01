@@ -15,6 +15,13 @@ router.get('/', async (req, res) => {
     const params: any[] = [];
     let paramIdx = 1;
 
+    const { meeting_id } = req.query;
+
+    if (meeting_id) {
+      conditions.push(`(e.proposed_by_meeting = $${paramIdx} OR e.id IN (SELECT DISTINCT epic_id FROM stories WHERE meeting_id = $${paramIdx} AND epic_id IS NOT NULL))`);
+      params.push(meeting_id);
+      paramIdx++;
+    }
     if (status) {
       conditions.push(`e.status = $${paramIdx++}`);
       params.push(status);

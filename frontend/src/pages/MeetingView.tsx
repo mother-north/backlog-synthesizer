@@ -540,18 +540,36 @@ export default function MeetingView() {
             children: (
               <div>
                 {epics.length === 0 ? (
-                  <Empty description="No epics found for this meeting" />
+                  <Empty description="No epics associated with this meeting. Run the pipeline to generate stories and epic proposals." />
                 ) : (
                   <Table
                     dataSource={epics}
                     rowKey="id"
                     pagination={false}
                     columns={[
-                      { title: 'ID', dataIndex: 'external_id', key: 'id', width: 100, render: (v: string) => v || '-' },
-                      { title: 'Title', dataIndex: 'title', key: 'title' },
-                      { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v: string) => <Tag color={v === 'active' ? 'green' : v === 'proposed' ? 'blue' : 'default'}>{v}</Tag> },
-                      { title: 'Proposed', dataIndex: 'is_proposed', key: 'proposed', width: 100, render: (v: boolean) => v ? <Tag color="blue">Yes</Tag> : 'No' },
-                      { title: 'Stories', key: 'stories', width: 80, render: (_: unknown, record: any) => stories.filter(s => s.epic_id === record.id).length },
+                      { title: 'ID', dataIndex: 'external_id', key: 'id', width: 100, render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '-'}</span> },
+                      { title: 'Title', dataIndex: 'title', key: 'title', render: (v: string, record: any) => (
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{v}</div>
+                          {record.proposal_justification && (
+                            <div style={{ fontSize: 12, color: 'var(--text-sec)', marginTop: 4 }}>{record.proposal_justification}</div>
+                          )}
+                        </div>
+                      )},
+                      { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v: string, record: any) => (
+                        <Tag color={record.is_proposed ? 'orange' : v === 'active' ? 'green' : 'default'}>
+                          {record.is_proposed ? 'Proposed' : v}
+                        </Tag>
+                      )},
+                      { title: 'Stories', dataIndex: 'story_count', key: 'stories', width: 80, render: (v: number) => v || 0 },
+                      { title: 'Actions', key: 'actions', width: 200, render: (_: unknown, record: any) => record.is_proposed ? (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <Button size="small" type="primary" onClick={() => epicsApi.approve(record.id).then(() => { message.success('Epic approved'); fetchData(); })}>Approve</Button>
+                          <Button size="small" danger onClick={() => epicsApi.reject(record.id, { action: 'reject', rationale: 'Rejected' }).then(() => { message.success('Epic rejected'); fetchData(); })}>Reject</Button>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-sec)', fontSize: 12 }}>{record.approved_by_name ? `Approved by ${record.approved_by_name}` : '-'}</span>
+                      )},
                     ]}
                   />
                 )}
