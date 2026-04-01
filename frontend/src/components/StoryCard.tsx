@@ -168,11 +168,15 @@ export default function StoryCard({ story, epics, expanded, onToggle, onUpdate, 
             <CloseCircleOutlined style={{ color: groundingColors.invalid }} />
           )}
         </Tooltip>
-        {openChecks.length > 0 && (
-          <Badge count={openChecks.length} size="small" color="var(--warning)">
-            <WarningOutlined style={{ color: 'var(--warning)' }} />
-          </Badge>
-        )}
+        {openChecks.length > 0 ? (
+          <Tag color="warning" style={{ margin: 0 }}>
+            <WarningOutlined /> {openChecks.length} open {openChecks.length === 1 ? 'check' : 'checks'}
+          </Tag>
+        ) : story.checks && story.checks.length > 0 ? (
+          <Tag color="success" style={{ margin: 0 }}>
+            <CheckCircleOutlined /> {story.checks.length} checks resolved
+          </Tag>
+        ) : null}
       </div>
 
       {expanded && (
@@ -302,7 +306,7 @@ export default function StoryCard({ story, epics, expanded, onToggle, onUpdate, 
                     }}>
                       {check.status}
                     </span>
-                    {check.status === 'open' && userRoles.includes(check.routed_to) && (
+                    {check.status === 'open' && (userRoles.includes('Admin') || userRoles.includes(check.routed_to)) && (
                       <Button size="small" type="primary" onClick={() => setResolvingCheckId(check.id)}>
                         Resolve
                       </Button>

@@ -224,8 +224,14 @@ export default function MeetingView() {
     setShowBulkConfirm(false);
   };
 
+  // Enrich stories with their checks
+  const storiesWithChecks = stories.map(story => ({
+    ...story,
+    checks: checks.filter(c => c.story_id === story.id),
+  }));
+
   // Group stories by epic
-  const storiesByEpic = stories.reduce<Record<number | string, Story[]>>((acc, story) => {
+  const storiesByEpic = storiesWithChecks.reduce<Record<number | string, Story[]>>((acc, story) => {
     const key = story.epic_id || 'orphan';
     if (!acc[key]) acc[key] = [];
     acc[key].push(story);
@@ -236,9 +242,9 @@ export default function MeetingView() {
   const existingEpics = epics.filter(e => !e.is_proposed);
 
   // Confirmable stories for bulk
-  const confirmableStories = stories.filter(s =>
+  const confirmableStories = storiesWithChecks.filter(s =>
     s.status === 'awaiting_confirmation' &&
-    (!s.checks || s.checks.filter(c => c.status === 'open').length === 0) &&
+    s.checks.filter(c => c.status === 'open').length === 0 &&
     s.epic_id
   );
 
