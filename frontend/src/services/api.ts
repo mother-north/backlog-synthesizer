@@ -162,7 +162,7 @@ export const dashboardApi = {
 // --- Knowledge Base ---
 export const kbApi = {
   search: (query: string, types?: string[]) =>
-    api.get('/kb/search', { params: { query, types: types?.join(',') } }),
+    api.post('/kb/search', { query, content_types: types }),
 };
 
 // --- Data Loading ---
