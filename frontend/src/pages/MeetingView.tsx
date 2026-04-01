@@ -730,7 +730,7 @@ export default function MeetingView() {
                   <Timeline
                     items={auditLog.map(entry => ({
                       color: entry.action === 'confirmed' ? 'green' : entry.action === 'rejected' ? 'red' : 'blue',
-                      children: (
+                      content: (
                         <div>
                           <div style={{ fontSize: 12, color: 'var(--text-sec)' }}>
                             {new Date(entry.created_at).toLocaleString()}
