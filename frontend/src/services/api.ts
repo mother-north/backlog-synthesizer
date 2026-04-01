@@ -155,8 +155,8 @@ export const memosApi = {
 
 // --- Dashboard ---
 export const dashboardApi = {
-  getStats: () => api.get('/dashboard/stats'),
-  getCharts: () => api.get('/dashboard/charts'),
+  getStats: () => api.get('/dashboard'),
+  getCharts: () => api.get('/dashboard'),
 };
 
 // --- Knowledge Base ---
