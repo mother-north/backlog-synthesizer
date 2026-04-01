@@ -342,11 +342,25 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
                 prop_key = proposed_epic_name.lower().strip()
                 resolved_epic_id = epic_id_lookup.get(prop_key)
                 if not resolved_epic_id:
+                    # Check DB for existing proposed epic with same title
                     try:
+                        existing = execute_query("SELECT id FROM epics WHERE lower(title) = %s", (prop_key,))
+                        if existing:
+                            resolved_epic_id = existing[0]["id"]
+                            epic_id_lookup[prop_key] = resolved_epic_id
+                    except Exception:
+                        pass
+                if not resolved_epic_id and proposed_epic_name:
+                    try:
+                        # Generate external_id for proposed epic
+                        max_new = execute_query("SELECT count(*) as c FROM epics WHERE external_id LIKE 'NEW-%%'")
+                        new_num = (max_new[0]["c"] if max_new else 0) + 1
+                        new_ext_id = f"NEW-{new_num:03d}"
+
                         new_epic_id = execute_write(
-                            """INSERT INTO epics (title, status, is_proposed, proposed_by_meeting, proposal_justification)
-                               VALUES (%s, 'proposed', true, %s, %s) RETURNING id""",
-                            (proposed_epic_name, meeting_id, f"Auto-proposed: no existing epic matches for stories in this meeting"),
+                            """INSERT INTO epics (external_id, title, status, is_proposed, proposed_by_meeting, proposal_justification)
+                               VALUES (%s, %s, 'proposed', true, %s, %s) RETURNING id""",
+                            (new_ext_id, proposed_epic_name, meeting_id, f"Auto-proposed: no existing epic matches"),
                         )
                         resolved_epic_id = new_epic_id
                         epic_id_lookup[prop_key] = new_epic_id

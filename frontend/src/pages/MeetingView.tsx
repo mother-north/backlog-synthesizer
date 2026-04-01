@@ -683,7 +683,10 @@ export default function MeetingView() {
                         render: (_: unknown, record: any) => {
                           const epic = epics.find(e => e.id === record.epic_id);
                           return epic ? (
-                            <span style={{ fontSize: 12 }}>{epic.external_id || epic.title}</span>
+                            <span style={{ fontSize: 12 }}>
+                              {epic.external_id && <Tag color={epic.is_proposed ? 'orange' : 'blue'} style={{ marginRight: 4 }}>{epic.external_id}</Tag>}
+                              {epic.title}
+                            </span>
                           ) : (
                             <Tag color="error">No Epic</Tag>
                           );
