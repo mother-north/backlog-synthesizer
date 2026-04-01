@@ -56,6 +56,10 @@ Generated → All Checks Resolved? → Awaiting Confirmation → Confirmed → R
                   ↓ no                                          ↓
             Under Review                                    Rejected
             (resolve checks)                           (rationale stored)
+                  ↓
+            Pending Decision
+            (blocked on epic approval
+             or unresolvable conflict)
 ```
 
 | Status | Meaning |
@@ -105,7 +109,7 @@ The system needs a UI to support the review workflow:
 - **Check resolution panel** — per story, show all checks with status, resolve inline
 - **Story editing** — user can edit generated stories (acceptance criteria, description, tags, etc.). System stores the original AI-generated version and tracks all edits. If the edited story conflicts with the original meeting minutes, system warns the user ("Your edit removes requirement X that was explicitly stated in the transcript").
 - **Final confirmation action** — explicit approve/reject (available only when all checks resolved)
-- **Review actions** — flag for escalation, split story
+- **Review actions** — flag for escalation
 
 ### Dashboard
 - **Key metrics** — stories generated vs confirmed vs rejected, average time from Generated → Confirmed, checks pending by role, conflicts open vs resolved, stories per meeting
@@ -135,32 +139,32 @@ The system needs a UI to support the review workflow:
 ```
 Meeting transcript
        ↓
-   [ 1. Context Retrieval ]
-   Broad retrieval from KB → relevance filtering → focused context
+   [ 1. Parse ]
+   Extract requirements, NFRs, bugs, dependencies, priority signals
        ↓
-   [ 2. Analyze with focused context ]
-   Extract requirements, NFRs, dependencies, priority signals
+   [ 2. Retrieve context ]
+   Per requirement: search KB → relevance filtering → focused context
        ↓
    [ 3. Cross-reference ]
    Check against: backlog (overlaps, duplicates), architecture (constraints),
-   decision log (contradictions with prior decisions), existing stories (dependencies)
+   decision log (contradictions with prior decisions), dependencies
        ↓
-   [ 4. Generate outputs ]
-   Candidate stories + conflict report + overlaps + violations + ambiguities
+   [ 4. Synthesize ]
+   Candidate stories grouped by epic + checks + proposed resolutions
    Each output grounded in source text with confidence level
        ↓
-   [ 5. Present in UI ]
-   Per-meeting story list with statuses, issues, questions
+   [ 5. Validate grounding ]
+   Verify citations exist in transcript, flag hallucinations
        ↓
-   [ 6. Human reviews ]
+   [ 6. Present in UI ]
+   Per-meeting story list with statuses, checks, grounding status
+       ↓
+   [ 7. Human reviews ]
    Confirm / reject / modify / escalate each item
-   Answer questions, resolve conflicts
+   On edit → re-run steps 3+4+5 for edited story
        ↓
-   [ 7. Finalize ]
-   Confirmed stories (ready to push) + decision memo
-       ↓
-   [ 8. Store in KB ]
-   All artifacts stored; feedback from corrections improves future runs
+   [ 8. Finalize (on demand) ]
+   Decision memo + store in KB + feedback loop
 ```
 
 ## System Outputs

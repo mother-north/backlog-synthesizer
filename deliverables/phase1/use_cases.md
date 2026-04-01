@@ -94,22 +94,27 @@
 - **Expected behavior:** Cross-Reference works with available data but notes incomplete items. If matching against an incomplete item → flags lower confidence. Backlog hygiene report notes data quality issues.
 - **Expected output:** Cross-reference results with confidence adjusted for data quality. Hygiene flags for incomplete backlog items.
 
-### EC-4: All stories map to a single existing epic
+### EC-4: Orphan story — no matching epic
+- **Trigger:** Meeting produces a requirement that doesn't fit any existing epic and isn't grouped with other requirements to form a new epic
+- **Expected behavior:** Synthesizer cannot assign an epic. System auto-creates a blocking "No Epic" check. Story status: Under Review. Story cannot be confirmed until epic is assigned (user edits epic dropdown or a new epic is proposed/approved).
+- **Expected output:** Story with "No Epic" blocking check, epic dropdown set to none. Confirm button disabled.
+
+### EC-5: All stories map to a single epic
 - **Trigger:** Meeting entirely focused on one feature area (e.g., all about Review Queue)
 - **Expected behavior:** All stories mapped to one epic. No new epic proposed. System handles gracefully — no forced grouping or splitting.
 - **Expected output:** All candidate stories under one epic. Normal check flow.
 
-### EC-5: Very large transcript with 20+ extractable requirements
+### EC-6: Very large transcript with 20+ extractable requirements
 - **Trigger:** Long meeting transcript producing many requirements
 - **Expected behavior:** Parser extracts all. Synthesis may propose multiple new epics if requirements span many areas. System handles volume without degradation. Meeting quality feedback notes high volume.
 - **Expected output:** Large candidate list, potentially multiple epic proposals, meeting quality feedback suggesting shorter/focused meetings.
 
-### EC-6: User provides missing context during review → KB enriched
+### EC-7: User provides missing context during review → KB enriched
 - **Trigger:** Context Retrieval flagged missing prior context. During review, user manually provides the context.
 - **Expected behavior:** Context stored in KB. Story updated and re-checked with new context. Future meetings referencing this topic will find it.
 - **Expected output:** Updated story with resolved ambiguity. KB enriched for future use.
 
-### EC-7: Story rejected → rationale stored for future learning
+### EC-8: Story rejected → rationale stored for future learning
 - **Trigger:** User rejects a generated story with rationale ("we already decided against this approach")
 - **Expected behavior:** Rejection + rationale stored in KB. Future meetings proposing similar stories will find this feedback.
 - **Expected output:** Story status: Rejected. Rationale in KB. Decision log updated.

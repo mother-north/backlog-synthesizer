@@ -13,7 +13,7 @@ Meeting transcript (.md)
 └────────────┬────────────────┘
              ↓
 ┌─────────────────────────────┐
-│  2. Context Retrieval Agent │
+│  2. Retriever Agent         │
 │  Query KB per requirement   │
 │  Output: focused context    │
 └────────────┬────────────────┘
@@ -26,18 +26,25 @@ Meeting transcript (.md)
 └────────────┬────────────────┘
              ↓
 ┌─────────────────────────────┐
-│  4. Synthesis Agent         │
+│  4. Synthesizer Agent       │
 │  Generate stories, group    │
 │  into epics, attach checks  │
 │  Output: analysis package   │
 └────────────┬────────────────┘
              ↓
+┌─────────────────────────────┐
+│  5. Validator Agent         │
+│  Check citations exist in   │
+│  source, grounding status   │
+│  Output: validated stories  │
+└────────────┬────────────────┘
+             ↓
         [ UI: Human review ]
           ↓ (on edit) ↓
-   [ Re-run agents 3+4 ]
+   [ Re-run agents 3+4+5 ]
           ↓
 ┌─────────────────────────────┐
-│  5. Memo Agent              │
+│  6. Memo Agent              │
 │  Decision memo (on demand), │
 │  store in KB, feedback      │
 └─────────────────────────────┘
@@ -45,7 +52,7 @@ Meeting transcript (.md)
 
 ## Agent Definitions
 
-### Agent 1: Parser
+### Agent 1: Parser (`parser.py`)
 **Input:** Meeting transcript (raw text)
 **Process:**
 1. Extract requirements from transcript — each grounded in specific source text (citation required)
@@ -67,7 +74,7 @@ Meeting transcript (.md)
 
 ---
 
-### Agent 2: Context Retrieval
+### Agent 2: Retriever (`retriever.py`)
 **Input:** Structured requirement list from Agent 1
 **Process:**
 1. For each extracted requirement, query KB for relevant context:
@@ -91,7 +98,7 @@ Meeting transcript (.md)
 
 ---
 
-### Agent 3: Cross-Reference
+### Agent 3: Cross-Reference (`crossref.py`)
 **Input:** Requirements from Agent 1 + context from Agent 2
 **Process:**
 1. Check each requirement against current backlog:
@@ -119,7 +126,7 @@ Meeting transcript (.md)
 
 ---
 
-### Agent 4: Synthesis
+### Agent 4: Synthesizer (`synthesizer.py`)
 **Input:** Requirements from Agent 1 + context from Agent 2 + checks from Agent 3
 **Process:**
 1. **Epic mapping and grouping:**
@@ -146,17 +153,32 @@ Meeting transcript (.md)
 - Questions routed to roles
 - Meeting quality feedback
 
-**Memory:** Reads from agents 1, 2, 3. Output goes to UI.
+**Memory:** Reads from agents 1, 2, 3. Output goes to Validator.
+
+---
+
+### Agent 5: Validator (`validator.py`)
+**Input:** Candidate stories from Agent 4 + original transcript
+**Process:**
+1. For each candidate story, verify source_citation exists verbatim (or near-verbatim) in the transcript
+2. Verify acceptance criteria are derivable from the cited text
+3. Check no requirements were fabricated (not in transcript)
+4. Assign grounding status: valid / warning / invalid
+5. Flag invalid stories before presenting to user
+
+**Output:** Validated stories with grounding status and issues list
+
+**Memory:** Reads transcript (via TranscriptReader) and stories from Agent 4. Output goes to UI.
 
 ---
 
 ### Human Review (UI)
-**Input:** Analysis package from Agent 4
+**Input:** Validated analysis package from Agent 5
 **Process:**
-1. User sees per-meeting story list grouped by epic, with statuses and checks
+1. User sees per-meeting story list grouped by epic, with statuses, checks, and grounding status
 2. User resolves checks (per role): approve, modify, escalate
 3. User can edit stories — system detects drift from source transcript and warns
-4. **On edit: re-run Agent 3 (Cross-Reference) + Agent 4 (Synthesis) on the edited story** to detect new conflicts or resolve existing ones
+4. **On edit: re-run Agents 3+4+5 (Cross-Reference + Synthesizer + Validator) on the edited story** to detect new conflicts, update checks, and re-validate grounding
 5. User confirms or rejects each story (only when all checks resolved)
 
 **Output:** Review decisions:
@@ -168,7 +190,7 @@ Meeting transcript (.md)
 
 ---
 
-### Agent 5: Memo Agent
+### Agent 6: Memo Agent (`memo.py`)
 **Input:** Current state of all stories + all prior agent outputs
 **Trigger:** On demand — user requests memo generation at any time. Can be run multiple times.
 
@@ -205,23 +227,25 @@ Meeting transcript (.md)
 ```
 Agent 1 (Parser) — no KB needed
   ↓ structured requirements
-Agent 2 (Context Retrieval) ←── reads KB per requirement
+Agent 2 (Retriever) ←── reads KB per requirement
   ↓ focused context per requirement
 Agent 3 (Cross-Reference) ←── reads from agents 1, 2
   ↓ checks per story
-Agent 4 (Synthesis) ←── reads from agents 1, 2, 3
-  ↓ analysis package
+Agent 4 (Synthesizer) ←── reads from agents 1, 2, 3
+  ↓ candidate stories + checks
+Agent 5 (Validator) ←── reads transcript + stories from agent 4
+  ↓ validated stories with grounding status
 UI (Human Review)
-  ↓ on edit → re-run agents 3+4 for edited story
+  ↓ on edit → re-run agents 3+4+5 for edited story
   ↓ review decisions
-Agent 5 (Memo) ←── on demand, reads current state
+Agent 6 (Memo) ←── on demand, reads current state
   ↓ write
 KB (persistent) ← available for next meeting's Agent 2
 ```
 
 **Per-session memory:** Each agent's output is passed forward and available to all downstream agents within the same meeting session.
 
-**Persistent memory (KB):** Three-layer storage (summary / structured / raw). Only Agent 5 writes to KB. Agent 2 reads from KB.
+**Persistent memory (KB):** Three-layer storage (summary / structured / raw). Only Agent 6 (Memo) writes to KB. Agent 2 (Retriever) reads from KB.
 
 ---
 
@@ -229,40 +253,43 @@ KB (persistent) ← available for next meeting's Agent 2
 
 ### Scenario A: Clean meeting, no conflicts
 1. **Parser** → extracts 5 clear features, 1 NFR, no ambiguities, all high confidence
-2. **Context Retrieval** → per requirement: pulls matching backlog items + architecture sections
+2. **Retriever** → per requirement: pulls matching backlog items + architecture sections
 3. **Cross-Reference** → no overlaps, no constraint violations, 1 dependency found
-4. **Synthesis** → 5 stories mapped to 2 existing epics, 1 dependency check, all high confidence
-5. **UI** → user resolves dependency (acknowledged), confirms all 5
-6. **Memo** → user generates memo: 5 confirmed stories, 0 pending, 0 rejected
+4. **Synthesizer** → 5 stories mapped to 2 existing epics, 1 dependency check, all high confidence
+5. **Validator** → 5/5 grounding valid, all citations found in transcript
+6. **UI** → user resolves dependency (acknowledged), confirms all 5
+7. **Memo** → user generates memo: 5 confirmed stories, 0 pending, 0 rejected
 
 **Result:** 5 confirmed stories under 2 existing epics. Clean run.
 
 ### Scenario B: Noisy meeting, conflicts with backlog + user edits a story
 1. **Parser** → extracts 8 requirements (3 features, 2 bugs, 1 improvement, 2 NFRs). 3 ambiguous, mixed confidence
-2. **Context Retrieval** → finds overlapping backlog items for 2 requirements, architecture constraints for 1
+2. **Retriever** → finds overlapping backlog items for 2 requirements, architecture constraints for 1
 3. **Cross-Reference** → 2 overlaps, 1 architecture violation, 1 contradiction with prior decision
-4. **Synthesis** → 8 stories: 5 under existing epics, 3 grouped into 1 proposed new epic. 4 stories have checks.
-5. **UI** → PM clarifies ambiguities. Architect resolves violation by editing story acceptance criteria → **re-run agents 3+4 on edited story** → new check: edit removed a constraint reference, system warns → architect adjusts → clean.
-6. **UI** → 6 confirmed, 2 rejected
-7. **Memo** → first memo: 4 confirmed, 2 rejected, 2 pending. Later: 6 confirmed, 2 rejected.
+4. **Synthesizer** → 8 stories: 5 under existing epics, 3 grouped into 1 proposed new epic. 4 stories have checks.
+5. **Validator** → 7/8 valid, 1 warning (acceptance criteria loosely derived from noisy text)
+6. **UI** → PM clarifies ambiguities. Architect resolves violation by editing story acceptance criteria → **re-run agents 3+4+5 on edited story** → new check: edit removed a constraint reference, system warns → architect adjusts → clean.
+7. **UI** → 6 confirmed, 2 rejected
+8. **Memo** → first memo: 4 confirmed, 2 rejected, 2 pending. Later: 6 confirmed, 2 rejected.
 
-**Result:** 6 confirmed, 2 rejected. 1 new epic proposed. Edit triggered re-check. Memo generated twice.
+**Result:** 6 confirmed, 2 rejected. 1 new epic proposed. Edit triggered re-check + re-validation. Memo generated twice.
 
 ### Scenario C: Meeting with bugs and missing context
 1. **Parser** → extracts 4 requirements: 2 features, 2 bugs ("batch processing crashes on large files", "risk score shows NaN for empty documents")
-2. **Context Retrieval** → finds related backlog items for bugs, but no context for "the auth approach we decided last week"
+2. **Retriever** → finds related backlog items for bugs, but no context for "the auth approach we decided last week"
 3. **Cross-Reference** → 1 bug may be duplicate of ERIS-047 (high confidence), missing context flagged
-4. **Synthesis** → 4 stories: 2 features under existing epics, 2 bugs. 1 bug flagged as potential duplicate, 1 feature pending (missing context)
-5. **UI** → Dev lead confirms bug is duplicate (skip). PM provides missing auth context → **re-run agents 3+4** → story now has full context, no new issues
-6. **Memo** → generated with 3 confirmed, 1 skipped (duplicate). Missing context now stored in KB.
+4. **Synthesizer** → 4 stories: 2 features under existing epics, 2 bugs. 1 bug flagged as potential duplicate, 1 feature pending (missing context)
+5. **Validator** → 4/4 valid
+6. **UI** → Dev lead confirms bug is duplicate (skip). PM provides missing auth context → **re-run agents 3+4+5** → story now has full context, no new issues
+7. **Memo** → generated with 3 confirmed, 1 skipped (duplicate). Missing context now stored in KB.
 
 **Result:** 3 confirmed (2 features, 1 bug), 1 duplicate skipped. KB enriched with auth decision.
 
 ### Scenario D: Meeting produces requirements spanning multiple epics
 1. **Parser** → extracts 6 requirements, 1 is large and cross-cutting ("add audit logging to all API endpoints")
-2. **Context Retrieval** → finds 4 epics potentially affected
+2. **Retriever** → finds 4 epics potentially affected
 3. **Cross-Reference** → large requirement touches 4 existing epics
-4. **Synthesis** → flags cross-cutting requirement, suggests splitting into 4 stories (1 per epic). Groups remaining 5 requirements: 3 under existing epics, 2 into proposed new epic.
+4. **Synthesizer** → flags cross-cutting requirement, suggests splitting into 4 stories (1 per epic). Groups remaining 5 requirements: 3 under existing epics, 2 into proposed new epic.
 5. **UI** → PM approves split. Architect confirms proposed new epic. All confirmed.
 6. **Memo** → 9 stories (4 from split + 5 others), 1 new epic created.
 

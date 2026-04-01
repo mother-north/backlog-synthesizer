@@ -27,10 +27,11 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 
 | Step | Do | Gate | Output |
 |---|---|---|---|
-| 2.1 Agent Architecture | Agent roles, inputs/outputs, orchestration pattern | Handles all Phase 1 use cases | `deliverables/phase2/agent_architecture.md` |
+| 2.1 Agent Architecture | Agent roles, inputs/outputs, orchestration, tech stack | Handles all Phase 1 use cases | `deliverables/phase2/agent_architecture.md` |
 | 2.2 Tool Interfaces | Mocked tool contracts (parsers, JSON reader) | Each contract maps to a data source | `deliverables/phase2/tool_interfaces.md` |
-| 2.3 Memory & Audit | Context store choice, persistence rules, trace schema | Supports audit trail requirement | `deliverables/phase2/memory_schema.md` |
-| 2.4 Architecture Diagram | Agents, tools, memory, data flows | Reviewed against all use cases | `deliverables/phase2/architecture_diagram.md` |
+| 2.3 Memory & Audit | Context store, persistence rules, trace schema | Supports audit trail requirement | `deliverables/phase2/memory_schema.md` |
+| 2.4 UI Design | Pages, wireframes, components, user flows | Covers all system concept UI requirements | `deliverables/phase2/ui_design.md` |
+| 2.5 Architecture Diagram | Agents, tools, memory, UI, data flows | Reviewed against all use cases | `deliverables/phase2/architecture_diagram.md` |
 
 ---
 
@@ -80,12 +81,16 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 | 1.2 Workflow | done |
 | 1.3 Use Cases | done |
 | 1.4 Synthetic Data | done |
-| 1.5 Phase Review | not started |
-| 2.1–2.4 | not started |
+| 1.5 Phase Review | done |
+| 2.1 Agent Architecture | done |
+| 2.2 Tool Interfaces | done |
+| 2.3 Memory & Audit | done |
+| 2.4 UI Design | done |
+| 2.5 Architecture Diagram | done |
 | 3.1–3.3 | not started |
 | 4.1–4.6 | not started |
 
-**Current:** Phase 1 — 1.1 and 1.3 have drafts, need AI review sessions
+**Current:** Phase 2 — Design
 
 ---
 
