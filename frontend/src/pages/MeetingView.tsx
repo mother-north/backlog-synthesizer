@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Tabs, Button, Tag, Skeleton, Table, Select, Input, Timeline, App, Empty, Checkbox } from 'antd';
+import { Tabs, Button, Tag, Skeleton, Table, Select, Input, Timeline, App, Empty, Checkbox, Modal, Descriptions } from 'antd';
 import {
   ArrowLeftOutlined,
   ReloadOutlined,
@@ -11,7 +11,7 @@ import {
   EyeOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi } from '../services/api';
+import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi, dataApi } from '../services/api';
 import { statusColors } from '../theme';
 import { useAuthStore } from '../store/auth';
 import StoryCard from '../components/StoryCard';
@@ -241,6 +241,21 @@ export default function MeetingView() {
     return true;
   });
 
+  // Backlog item preview
+  const [viewBacklogItem, setViewBacklogItem] = useState<any>(null);
+
+  const fetchBacklogItem = async (externalId: string) => {
+    try {
+      const res = await dataApi.getBacklog({ search: externalId });
+      const items = res.data?.rows || res.data || [];
+      const match = items.find((i: any) => i.external_id === externalId);
+      if (match) setViewBacklogItem(match);
+      else message.warning(`Backlog item ${externalId} not found`);
+    } catch {
+      message.error('Failed to load backlog item');
+    }
+  };
+
   // Parse ERIS-XXX references from check details
   const renderDetailsWithBacklogLinks = (details: string) => {
     if (!details) return '-';
@@ -253,7 +268,7 @@ export default function MeetingView() {
               <Tag color="blue" style={{ margin: 0, cursor: 'pointer' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.open(`/data/backlog?search=${part}`, '_blank');
+                  fetchBacklogItem(part);
                 }}>
                 {part} <EyeOutlined style={{ fontSize: 10, marginLeft: 2 }} />
               </Tag>
@@ -826,6 +841,45 @@ export default function MeetingView() {
           },
         ]}
       />
+
+      {/* Backlog Item Preview Modal */}
+      <Modal
+        title={viewBacklogItem ? `${viewBacklogItem.external_id}: ${viewBacklogItem.title}` : ''}
+        open={!!viewBacklogItem}
+        onCancel={() => setViewBacklogItem(null)}
+        footer={<Button onClick={() => setViewBacklogItem(null)}>Close</Button>}
+        width={700}
+        destroyOnHidden
+      >
+        {viewBacklogItem && (
+          <Descriptions column={2} bordered size="small" style={{ marginTop: 16 }}>
+            <Descriptions.Item label="ID">{viewBacklogItem.external_id}</Descriptions.Item>
+            <Descriptions.Item label="Type"><Tag color={viewBacklogItem.type === 'epic' ? 'purple' : viewBacklogItem.type === 'bug' ? 'red' : viewBacklogItem.type === 'story' ? 'blue' : 'default'}>{viewBacklogItem.type}</Tag></Descriptions.Item>
+            <Descriptions.Item label="Title" span={2}>{viewBacklogItem.title}</Descriptions.Item>
+            <Descriptions.Item label="Description" span={2}>{viewBacklogItem.description || <span style={{ color: 'var(--gray-400)' }}>No description</span>}</Descriptions.Item>
+            <Descriptions.Item label="Epic">{viewBacklogItem.epic_id || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Status"><Tag>{viewBacklogItem.status}</Tag></Descriptions.Item>
+            <Descriptions.Item label="Priority">{viewBacklogItem.priority ? <Tag color={viewBacklogItem.priority === 'critical' ? 'red' : viewBacklogItem.priority === 'high' ? 'orange' : 'blue'}>{viewBacklogItem.priority}</Tag> : '—'}</Descriptions.Item>
+            <Descriptions.Item label="Labels">
+              {viewBacklogItem.labels && viewBacklogItem.labels.length > 0
+                ? viewBacklogItem.labels.map((l: string) => <Tag key={l} style={{ marginBottom: 2 }}>{l}</Tag>)
+                : '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Acceptance Criteria" span={2}>
+              {viewBacklogItem.acceptance_criteria && viewBacklogItem.acceptance_criteria.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {viewBacklogItem.acceptance_criteria.map((ac: string, i: number) => <li key={i}>{ac}</li>)}
+                </ul>
+              ) : <span style={{ color: 'var(--gray-400)' }}>None</span>}
+            </Descriptions.Item>
+            <Descriptions.Item label="Dependencies" span={2}>
+              {viewBacklogItem.dependencies && viewBacklogItem.dependencies.length > 0
+                ? viewBacklogItem.dependencies.map((d: string) => <Tag key={d} color="blue">{d}</Tag>)
+                : '—'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
+      </Modal>
     </div>
   );
 }
