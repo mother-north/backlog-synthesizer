@@ -113,6 +113,8 @@ export default function MeetingView() {
   const { message } = App.useApp();
   const { user } = useAuthStore();
   const userRoles = user?.roles || [];
+  const isAdmin = userRoles.includes('Admin');
+  const canResolve = (routedTo: string) => isAdmin || userRoles.includes(routedTo);
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
@@ -233,7 +235,7 @@ export default function MeetingView() {
   // Checks filtering
   const filteredChecks = checks.filter(c => {
     if (checkStatusFilter !== 'all' && c.status !== checkStatusFilter) return false;
-    if (checkRoleFilter === 'mine' && !userRoles.includes(c.routed_to)) return false;
+    if (checkRoleFilter === 'mine' && !canResolve(c.routed_to)) return false;
     if (checkRoleFilter !== 'all' && checkRoleFilter !== 'mine' && c.routed_to !== checkRoleFilter) return false;
     return true;
   });
@@ -273,7 +275,7 @@ export default function MeetingView() {
       title: 'Action',
       key: 'action',
       render: (_, record) => (
-        record.status === 'open' && userRoles.includes(record.routed_to) ? (
+        record.status === 'open' && canResolve(record.routed_to) ? (
           <Button size="small" type="primary" onClick={() => setResolvingCheckId(record.id)}>
             Resolve
           </Button>
