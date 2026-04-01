@@ -85,7 +85,7 @@ router.put('/:id',
   body('description').optional().isString(),
   body('type').optional().isString(),
   body('acceptance_criteria').optional(),
-  body('epic_id').optional().isInt(),
+  body('epic_id').optional({ nullable: true }),
   body('priority_signals').optional(),
   body('feature_tags').optional(),
   async (req: AuthRequest, res: Response) => {

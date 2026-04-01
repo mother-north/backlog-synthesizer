@@ -155,8 +155,8 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
             <Select
               value={editEpicId || undefined}
               onChange={(val) => {
-                setEditEpicId(val);
-                storiesApi.update(story.id, { epic_id: val || undefined }).then(() => {
+                setEditEpicId(val ?? null);
+                storiesApi.update(story.id, { epic_id: val ?? null } as any).then(() => {
                   message.success('Epic updated');
                   onUpdate();
                 }).catch(() => message.error('Failed to update epic'));
