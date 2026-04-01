@@ -59,6 +59,8 @@ export default function AllStories() {
       dataIndex: 'status',
       key: 'status',
       width: 160,
+      filters: Array.from(new Set(stories.map(s => s.status))).filter(Boolean).map(v => ({ text: formatStatus(v), value: v })),
+      onFilter: (value, record) => record.status === value,
       render: (status: string) => (
         <span className="status-badge" style={{
           background: `${statusColors[status] || 'var(--gray-400)'}20`,
@@ -79,6 +81,8 @@ export default function AllStories() {
       title: 'Meeting',
       dataIndex: 'meeting_title',
       key: 'meeting',
+      filters: Array.from(new Set(stories.map(s => s.meeting_title))).filter(Boolean).map(v => ({ text: v as string, value: v as string })),
+      onFilter: (value, record) => record.meeting_title === value,
     },
     {
       title: 'Date',
@@ -91,12 +95,16 @@ export default function AllStories() {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
+      filters: Array.from(new Set(stories.map(s => s.type))).filter(Boolean).map(v => ({ text: v, value: v })),
+      onFilter: (value, record) => record.type === value,
       render: (type: string) => <Tag color={TYPE_COLORS[type] || 'default'}>{type}</Tag>,
     },
     {
       title: 'Confidence',
       dataIndex: 'confidence',
       key: 'confidence',
+      filters: Array.from(new Set(stories.map(s => s.confidence))).filter(Boolean).map(v => ({ text: v, value: v })),
+      onFilter: (value, record) => record.confidence === value,
       render: (c: string) => (
         <Tooltip title={c}>
           <span className="confidence-dot" style={{ background: confidenceColors[c] || 'var(--gray-400)' }} />
@@ -181,7 +189,7 @@ export default function AllStories() {
             onClick: () => navigate(`/meetings/${record.meeting_id}?story=${record.id}`),
             style: { cursor: 'pointer' },
           })}
-          pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (total) => `Showing ${total} stories` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
         />
       )}
     </div>

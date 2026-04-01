@@ -65,6 +65,8 @@ export default function ActionList() {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
+      filters: Array.from(new Set(filtered.map(a => a.type))).filter(Boolean).map(v => ({ text: (v || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()), value: v })),
+      onFilter: (value, record) => record.type === value,
       render: (type: string) => (
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {TYPE_ICONS[type] || <WarningOutlined />}
@@ -95,6 +97,8 @@ export default function ActionList() {
       title: 'Role',
       dataIndex: 'routed_to',
       key: 'role',
+      filters: Array.from(new Set(filtered.map(a => a.routed_to))).filter(Boolean).map(v => ({ text: v, value: v })),
+      onFilter: (value, record) => record.routed_to === value,
       render: (role: string) => <Tag color="blue">{role}</Tag>,
     },
     {
@@ -155,7 +159,7 @@ export default function ActionList() {
             onClick: () => navigate(`/meetings/${record.meeting_id}?story=${record.story_id}`),
             style: { cursor: 'pointer' },
           })}
-          pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (total) => `${total} items` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
         />
       )}
     </div>

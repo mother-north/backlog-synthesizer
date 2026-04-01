@@ -93,6 +93,8 @@ export default function MeetingsList() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
+      filters: Array.from(new Set(meetings.map(m => m.status))).filter(Boolean).map(v => ({ text: formatStatus(v), value: v })),
+      onFilter: (value, record) => record.status === value,
       render: (status: string) => (
         <Tag
           color={status === 'completed' ? 'success' : status === 'in_review' ? 'warning' : status === 'processing' ? 'processing' : 'default'}
@@ -150,7 +152,7 @@ export default function MeetingsList() {
             onClick: () => navigate(`/meetings/${record.id}`),
             style: { cursor: 'pointer' },
           })}
-          pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (total) => `${total} meetings` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
         />
       )}
 

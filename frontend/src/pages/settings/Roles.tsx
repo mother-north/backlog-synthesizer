@@ -107,7 +107,7 @@ export default function Roles() {
           dataSource={roles}
           columns={columns}
           rowKey="id"
-          pagination={{ pageSize: 20, showTotal: (total) => `${total} roles` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
         />
       )}
 

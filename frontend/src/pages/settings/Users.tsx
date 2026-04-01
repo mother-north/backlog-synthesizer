@@ -97,11 +97,13 @@ export default function Users() {
 
   const columns: ColumnsType<User> = [
     { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a, b) => a.email.localeCompare(b.email) },
-    { title: 'Display Name', dataIndex: 'displayName', key: 'name', render: (v: string) => v || '-' },
+    { title: 'Display Name', dataIndex: 'displayName', key: 'name', sorter: (a, b) => (a.displayName || '').localeCompare(b.displayName || ''), render: (v: string) => v || '-' },
     {
       title: 'Roles',
       dataIndex: 'roles',
       key: 'roles',
+      filters: Array.from(new Set(users.flatMap(u => u.roles || []))).filter(Boolean).map(v => ({ text: v, value: v })),
+      onFilter: (value, record) => (record.roles || []).includes(value as string),
       render: (roles: string[]) => roles?.map(r => <span key={r} style={{ marginRight: 4 }}>{r}</span>),
     },
     {
@@ -142,7 +144,7 @@ export default function Users() {
           dataSource={users}
           columns={columns}
           rowKey="id"
-          pagination={{ pageSize: 20, showTotal: (total) => `${total} users` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
         />
       )}
 
