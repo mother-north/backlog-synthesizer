@@ -422,9 +422,17 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
             footer={<Button onClick={() => setShowTranscript(false)}>Close</Button>}
             width={700}
             destroyOnHidden
+            afterOpenChange={(open) => {
+              if (open) {
+                setTimeout(() => {
+                  const mark = document.querySelector('.transcript-preview-modal mark');
+                  if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+              }
+            }}
           >
             {transcript && story.source_citation ? (
-              <div style={{
+              <div className="transcript-preview-modal" style={{
                 maxHeight: 500,
                 overflow: 'auto',
                 whiteSpace: 'pre-wrap',
@@ -437,7 +445,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
                 <span dangerouslySetInnerHTML={{
                   __html: transcript.replace(
                     new RegExp(`(${story.source_citation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 200)})`, 'gi'),
-                    '<mark style="background:#ffd591; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>'
+                    '<mark style="background:#ffd591; padding: 2px 4px; border-radius: 3px; font-weight: 600; border: 2px solid #fa8c16;">$1</mark>'
                   ),
                 }} />
               </div>
