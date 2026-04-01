@@ -125,11 +125,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
   };
 
   return (
-    <div className="bs-story-card">
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12, color: 'var(--text)' }}>
-        #{story.id} — {story.title}
-      </div>
-      <div className="bs-story-card-body" style={{ padding: '0' }}>
+    <div style={{ borderTop: '1px solid var(--gray-200)', padding: '16px 8px' }}>
           {/* Epic assignment */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 12, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Epic</label>
@@ -413,7 +409,6 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
             confirmText="Save"
             loading={saving}
           />
-        </div>
     </div>
   );
 }
