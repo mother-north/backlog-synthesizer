@@ -114,7 +114,7 @@ export const meetingsApi = {
 // --- Stories ---
 export const storiesApi = {
   getAll: (params?: Record<string, string>) => api.get('/stories', { params }),
-  getByMeeting: (meetingId: number) => api.get(`/meetings/${meetingId}/stories`),
+  getByMeeting: (meetingId: number) => api.get('/stories', { params: { meeting_id: meetingId } }),
   getById: (id: number) => api.get(`/stories/${id}`),
   update: (id: number, data: Partial<{ description: string; acceptance_criteria: string[]; epic_id: number; feature_tags: string[] }>) =>
     api.put(`/stories/${id}`, data),
@@ -128,7 +128,7 @@ export const storiesApi = {
 // --- Checks ---
 export const checksApi = {
   getByMeeting: (meetingId: number, params?: Record<string, string>) =>
-    api.get(`/meetings/${meetingId}/checks`, { params }),
+    api.get('/checks', { params: { meeting_id: meetingId, ...params } }),
   getByStory: (storyId: number) => api.get(`/stories/${storyId}/checks`),
   resolve: (id: number, data: { resolution: string; notes?: string }) =>
     api.post(`/checks/${id}/resolve`, data),
@@ -139,7 +139,7 @@ export const checksApi = {
 // --- Epics ---
 export const epicsApi = {
   getAll: () => api.get('/epics'),
-  getByMeeting: (meetingId: number) => api.get(`/meetings/${meetingId}/epics`),
+  getByMeeting: (meetingId: number) => api.get('/epics', { params: { meeting_id: meetingId } }),
   approve: (id: number) => api.post(`/epics/${id}/approve`),
   reject: (id: number, data: { action: string; targetEpicId?: number; rationale?: string }) =>
     api.post(`/epics/${id}/reject`, data),
