@@ -30,8 +30,9 @@ export default function AccessControl() {
 
   useEffect(() => {
     rolesApi.getAll().then(res => {
-      setRoles(res.data?.rows || res.data || []);
-      if (res.data.length > 0) setSelectedRole(res.data[0].id);
+      const list = res.data?.rows || res.data || [];
+      setRoles(list);
+      if (list.length > 0) setSelectedRole(list[0].id);
     }).catch(() => {
       message.error('Failed to load roles');
     }).finally(() => setLoading(false));
@@ -41,8 +42,8 @@ export default function AccessControl() {
     if (!selectedRole) return;
     setLoading(true);
     menuAccessApi.getByRole(selectedRole).then(res => {
-      const dbRules = res.data as Array<{ menuPath: string; tabName: string | null; allowed: boolean }>;
-      const ruleMap = new Map(dbRules.map(r => [`${r.menuPath}::${String(r.tabName)}`, r.allowed]));
+      const dbRules = (res.data?.rows || res.data || []) as Array<{ menu_path: string; tab_name: string | null; allowed: boolean }>;
+      const ruleMap = new Map(dbRules.map(r => [`${r.menu_path}::${String(r.tab_name)}`, r.allowed]));
       const menuItems = getMenuAccessItems();
       const merged: AccessRule[] = menuItems.map(item => ({
         ...item,
