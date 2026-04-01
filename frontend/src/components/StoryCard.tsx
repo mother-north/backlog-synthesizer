@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tag, Select, Button, Input, Space, Badge, Tooltip, App } from 'antd';
+import { Tag, Select, Button, Input, Space, Tooltip, App } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
