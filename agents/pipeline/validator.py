@@ -147,9 +147,9 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
     Verifies each candidate story's citation exists in the transcript,
     acceptance criteria are derivable, and nothing is fabricated.
     """
-    config = config or {}
-    configurable = config.get("configurable", {})
-    progress_cb = configurable.get("progress_callback")
+    # config handled by LangGraph
+    
+    
     meeting_id = state["meeting_id"]
     candidate_stories: list[CandidateStory] = state.get("candidate_stories", [])
     transcript = state.get("transcript", "")
@@ -166,8 +166,11 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
     validation_results: list[ValidationResult] = []
 
     if not candidate_stories:
-        if progress_cb:
-            progress_cb({"agent": "validator", "status": "done", "message": "No stories to validate."})
+        try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "validator", "done", "No stories to validate.")
+    except Exception:
+        pass
         return {"validation_results": [], "errors": errors}
 
     # Re-read transcript if not in state

@@ -121,19 +121,15 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
 
     Reads transcript from DB, extracts structured requirements via GPT-4o.
     """
-    config = config or {}
-    configurable = config.get("configurable", {})
-    progress_cb = configurable.get("progress_callback")
     meeting_id = state["meeting_id"]
     errors: list[PipelineError] = list(state.get("errors", []))
 
     # Emit progress: running
-    if progress_cb:
-        progress_cb({
-            "agent": "parser",
-            "status": "running",
-            "message": "Extracting requirements from transcript...",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "parser", "running", "Extracting requirements from transcript...")
+    except Exception:
+        pass
 
     start = time.time()
     prompt_tokens = 0
@@ -208,13 +204,11 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
         logger.warning("Failed to write agent trace: %s", te)
 
     # Emit progress: done
-    if progress_cb:
-        progress_cb({
-            "agent": "parser",
-            "status": "done",
-            "message": f"Extracted {len(requirements)} requirements",
-            "details": {"requirement_count": len(requirements)},
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "parser", "done", f"Extracted {len(requirements)} requirements")
+    except Exception:
+        pass
 
     return {
         "transcript": transcript,

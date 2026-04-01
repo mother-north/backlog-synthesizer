@@ -138,9 +138,9 @@ async def crossref_agent(state: dict, config: dict | None = None) -> dict:
 
     Checks each requirement against backlog, architecture, and decisions.
     """
-    config = config or {}
-    configurable = config.get("configurable", {})
-    progress_cb = configurable.get("progress_callback")
+    # config handled by LangGraph
+    
+    
     meeting_id = state["meeting_id"]
     requirements: list[Requirement] = state.get("requirements", [])
     context: dict[str, list] = state.get("context", {})

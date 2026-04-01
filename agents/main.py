@@ -81,39 +81,30 @@ def _get_graph():
 
 _AGENT_ORDER = ["parser", "retriever", "crossref", "synthesizer", "validator"]
 
-def _make_progress_callback(meeting_id: int):
-    """Return a callback that pushes progress events and updates DB progress."""
-    # Track state per agent
-    progress_state: dict[str, dict] = {
-        agent: {"agent": agent, "status": "pending", "message": ""}
-        for agent in _AGENT_ORDER
-    }
 
-    def callback(event: dict):
-        agent = event.get("agent", "")
-        if agent in progress_state:
-            progress_state[agent] = event
+def update_pipeline_progress(meeting_id: int, agent_name: str, status: str, message: str = ""):
+    """Write pipeline progress directly to DB. Called from each agent."""
+    try:
+        # Read current progress
+        from tools.db import execute_query_one
+        row = execute_query_one("SELECT pipeline_progress FROM meetings WHERE id = %s", (meeting_id,))
+        current = row.get("pipeline_progress") if row else None
+        if not current or not isinstance(current, list):
+            current = [{"agent": a, "status": "pending", "message": ""} for a in _AGENT_ORDER]
 
-        # Push to SSE queue
-        q = _progress_queues.get(meeting_id)
-        if q is not None:
-            try:
-                q.put_nowait(event)
-            except asyncio.QueueFull:
-                pass
+        # Update the specific agent
+        for step in current:
+            if step.get("agent") == agent_name:
+                step["status"] = status
+                step["message"] = message
+                break
 
-        # Write full progress array to DB
-        try:
-            progress_array = [progress_state[a] for a in _AGENT_ORDER]
-            execute_write(
-                "UPDATE meetings SET pipeline_progress = %s::jsonb WHERE id = %s",
-                (json.dumps(progress_array), meeting_id),
-            )
-            logger.info("Progress updated: %s", [s["status"] for s in progress_array])
-        except Exception as e:
-            logger.warning("Progress DB write failed: %s", e)
-
-    return callback
+        execute_write(
+            "UPDATE meetings SET pipeline_progress = %s::jsonb WHERE id = %s",
+            (json.dumps(current), meeting_id),
+        )
+    except Exception as e:
+        logger.warning("Progress update failed for %s/%s: %s", meeting_id, agent_name, e)
 
 
 # ---------------------------------------------------------------------------

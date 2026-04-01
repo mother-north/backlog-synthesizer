@@ -87,9 +87,9 @@ async def retriever_agent(state: dict, config: dict | None = None) -> dict:
     For each requirement, searches KB for similar content, backlog items,
     architecture sections, and prior decisions. LLM filters for relevance.
     """
-    config = config or {}
-    configurable = config.get("configurable", {})
-    progress_cb = configurable.get("progress_callback")
+    # config handled by LangGraph
+    
+    
     meeting_id = state["meeting_id"]
     requirements: list[Requirement] = state.get("requirements", [])
     errors: list[PipelineError] = list(state.get("errors", []))

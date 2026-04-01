@@ -244,21 +244,20 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
 
     Generates candidate stories, maps to epics, attaches checks, produces quality feedback.
     """
-    config = config or {}
-    configurable = config.get("configurable", {})
-    progress_cb = configurable.get("progress_callback")
+    # config handled by LangGraph
+    
+    
     meeting_id = state["meeting_id"]
     requirements: list[Requirement] = state.get("requirements", [])
     checks: list[Check] = state.get("checks", [])
     context: dict[str, list] = state.get("context", {})
     errors: list[PipelineError] = list(state.get("errors", []))
 
-    if progress_cb:
-        progress_cb({
-            "agent": "synthesizer",
-            "status": "running",
-            "message": "Generating candidate stories and mapping to epics...",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "synthesizer", "running", "Generating candidate stories and mapping to epics...")
+    except Exception:
+        pass
 
     start = time.time()
 

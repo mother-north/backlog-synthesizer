@@ -134,9 +134,9 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
 
     Generates a decision memo reflecting current state, stores artifacts in KB.
     """
-    config = config or {}
-    configurable = config.get("configurable", {})
-    progress_cb = configurable.get("progress_callback")
+    # config handled by LangGraph
+    
+    
     meeting_id = state["meeting_id"]
     candidate_stories: list[CandidateStory] = state.get("candidate_stories", [])
     review_decisions: list[ReviewDecision] = state.get("review_decisions", [])
@@ -144,12 +144,11 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
     meeting_quality: MeetingQuality | None = state.get("meeting_quality")
     errors: list[PipelineError] = list(state.get("errors", []))
 
-    if progress_cb:
-        progress_cb({
-            "agent": "memo",
-            "status": "running",
-            "message": "Generating decision memo...",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "memo", "running", "Generating decision memo...")
+    except Exception:
+        pass
 
     start = time.time()
 
