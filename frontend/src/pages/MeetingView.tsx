@@ -169,7 +169,7 @@ export default function MeetingView() {
       const [meetingRes, storiesRes, epicsRes, checksRes] = await Promise.all([
         meetingsApi.getById(meetingId),
         storiesApi.getByMeeting(meetingId),
-        epicsApi.getByMeeting(meetingId),
+        epicsApi.getAll(),
         checksApi.getByMeeting(meetingId),
       ]);
       setMeeting(meetingRes.data?.rows?.[0] || meetingRes.data);
@@ -695,15 +695,18 @@ export default function MeetingView() {
             children: (
               <div>
                 {epics.length === 0 ? (
-                  <Empty description="No epics associated with this meeting. Run the pipeline to generate stories and epic proposals." />
+                  <Empty description="No epics found. Upload backlog data to seed epics, or run the pipeline to generate epic proposals." />
                 ) : (
                   <Table
                     dataSource={epics}
                     rowKey="id"
                     pagination={false}
+                    size="middle"
                     columns={[
-                      { title: 'ID', dataIndex: 'external_id', key: 'id', width: 100, render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '-'}</span> },
-                      { title: 'Title', dataIndex: 'title', key: 'title', render: (v: string, record: any) => (
+                      { title: 'ID', dataIndex: 'external_id', key: 'id', width: 100,
+                        render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '-'}</span> },
+                      { title: 'Title', dataIndex: 'title', key: 'title', sorter: (a: any, b: any) => (a.title || '').localeCompare(b.title || ''),
+                        render: (v: string, record: any) => (
                         <div>
                           <div style={{ fontWeight: 500 }}>{v}</div>
                           {record.proposal_justification && (
@@ -711,19 +714,34 @@ export default function MeetingView() {
                           )}
                         </div>
                       )},
-                      { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v: string, record: any) => (
-                        <Tag color={record.is_proposed ? 'orange' : v === 'active' ? 'green' : 'default'}>
-                          {record.is_proposed ? 'Proposed' : v}
+                      { title: 'Source', key: 'source', width: 120,
+                        filters: [{ text: 'Backlog', value: 'backlog' }, { text: 'Proposed', value: 'proposed' }],
+                        onFilter: (value: any, record: any) => value === 'proposed' ? record.is_proposed : !record.is_proposed,
+                        render: (_: unknown, record: any) => (
+                        <Tag color={record.is_proposed ? 'orange' : 'green'}>
+                          {record.is_proposed ? 'Proposed' : 'Backlog'}
                         </Tag>
                       )},
-                      { title: 'Stories', dataIndex: 'story_count', key: 'stories', width: 80, render: (v: number) => v || 0 },
-                      { title: 'Actions', key: 'actions', width: 200, render: (_: unknown, record: any) => record.is_proposed ? (
+                      { title: 'All Stories', dataIndex: 'story_count', key: 'all_stories', width: 100,
+                        sorter: (a: any, b: any) => (a.story_count || 0) - (b.story_count || 0),
+                        render: (v: number) => v || 0 },
+                      { title: 'This Meeting', key: 'meeting_stories', width: 110,
+                        sorter: (a: any, b: any) => {
+                          const aCount = storiesWithChecks.filter(s => s.epic_id === a.id).length;
+                          const bCount = storiesWithChecks.filter(s => s.epic_id === b.id).length;
+                          return aCount - bCount;
+                        },
+                        render: (_: unknown, record: any) => {
+                          const count = storiesWithChecks.filter(s => s.epic_id === record.id).length;
+                          return count > 0 ? <Tag color="blue">{count}</Tag> : <span style={{ color: 'var(--gray-400)' }}>0</span>;
+                        }},
+                      { title: 'Actions', key: 'actions', width: 180, render: (_: unknown, record: any) => record.is_proposed ? (
                         <div style={{ display: 'flex', gap: 8 }}>
                           <Button size="small" type="primary" onClick={() => epicsApi.approve(record.id).then(() => { message.success('Epic approved'); fetchData(); })}>Approve</Button>
                           <Button size="small" danger onClick={() => epicsApi.reject(record.id, { action: 'reject', rationale: 'Rejected' }).then(() => { message.success('Epic rejected'); fetchData(); })}>Reject</Button>
                         </div>
                       ) : (
-                        <span style={{ color: 'var(--text-sec)', fontSize: 12 }}>{record.approved_by_name ? `Approved by ${record.approved_by_name}` : '-'}</span>
+                        <span style={{ color: 'var(--text-sec)', fontSize: 12 }}>—</span>
                       )},
                     ]}
                   />

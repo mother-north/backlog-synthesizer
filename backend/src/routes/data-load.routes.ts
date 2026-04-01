@@ -140,6 +140,26 @@ router.post('/backlog/upload', upload.single('file'), async (req: AuthRequest, r
       [JSON.stringify({ count: items.length, file: req.file.originalname }), req.user!.id]
     );
 
+    // Sync epics from backlog items
+    try {
+      // Remove existing non-proposed epics and re-seed from backlog
+      await query(`DELETE FROM epics WHERE is_proposed = false AND id NOT IN (SELECT DISTINCT epic_id FROM stories WHERE epic_id IS NOT NULL)`);
+      const epicItems = items.filter(i => (i.type || '').toLowerCase() === 'epic');
+      for (const epic of epicItems) {
+        const extId = epic.external_id || epic.externalId || epic.id || null;
+        const existing = await query(`SELECT id FROM epics WHERE external_id = $1`, [extId]);
+        if (existing.rows.length === 0) {
+          await query(
+            `INSERT INTO epics (external_id, title, description, status, is_proposed) VALUES ($1, $2, $3, 'active', false)`,
+            [extId, epic.title, epic.description || null]
+          );
+        }
+      }
+      logger.info(`Synced ${epicItems.length} epics from backlog`);
+    } catch (e) {
+      logger.error('Epic sync failed:', e);
+    }
+
     // Embed backlog items in background
     embedBacklogItems()
       .then(n => logger.info(`Embedded ${n} backlog items into KB`))
