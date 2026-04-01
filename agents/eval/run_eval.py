@@ -48,11 +48,42 @@ async def run_pipeline_for_eval(golden: dict) -> dict:
     from pipeline.validator import validator_agent
 
     inputs = golden.get("inputs", {})
-    transcript = inputs.get("transcript", "")
     meeting_id = golden.get("scenario_id", 0)
 
+    # Read transcript from file path if provided
+    transcript = inputs.get("transcript", "")
+    if not transcript and inputs.get("meeting"):
+        meeting_path = inputs["meeting"]
+        # Resolve relative to project root
+        project_root = os.path.dirname(_AGENTS_DIR)
+        abs_path = os.path.join(project_root, meeting_path) if not os.path.isabs(meeting_path) else meeting_path
+        if os.path.exists(abs_path):
+            with open(abs_path, "r") as f:
+                transcript = f.read()
+        else:
+            logger.warning("Meeting file not found: %s", abs_path)
+
+    # Read architecture from file if provided
+    arch_content = inputs.get("architecture_content", "")
+    if not arch_content and inputs.get("architecture"):
+        arch_path = inputs["architecture"]
+        project_root = os.path.dirname(_AGENTS_DIR)
+        abs_path = os.path.join(project_root, arch_path) if not os.path.isabs(arch_path) else arch_path
+        if os.path.exists(abs_path):
+            with open(abs_path, "r") as f:
+                arch_content = f.read()
+
+    # Read backlog from file if provided
+    backlog_items = inputs.get("backlog_items", [])
+    if not backlog_items and inputs.get("backlog"):
+        backlog_path = inputs["backlog"]
+        project_root = os.path.dirname(_AGENTS_DIR)
+        abs_path = os.path.join(project_root, backlog_path) if not os.path.isabs(backlog_path) else backlog_path
+        if os.path.exists(abs_path):
+            with open(abs_path, "r") as f:
+                backlog_items = json.load(f)
+
     # We need the transcript in the DB for tools that read it.
-    # In eval mode we insert it temporarily.
     from tools.db import execute_write, execute_query_one
     try:
         row = execute_query_one("SELECT id FROM meetings WHERE id = %s", (meeting_id,))
@@ -73,7 +104,6 @@ async def run_pipeline_for_eval(golden: dict) -> dict:
         logger.warning("Could not insert eval meeting into DB: %s", e)
 
     # Similarly insert backlog items if provided
-    backlog_items = inputs.get("backlog", [])
     if backlog_items:
         try:
             # Clear existing for this eval run and re-insert
@@ -97,7 +127,6 @@ async def run_pipeline_for_eval(golden: dict) -> dict:
             logger.warning("Could not insert eval backlog: %s", e)
 
     # Insert architecture doc if provided
-    arch_content = inputs.get("architecture", "")
     if arch_content:
         try:
             execute_write(

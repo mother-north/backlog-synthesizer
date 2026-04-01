@@ -1,0 +1,143 @@
+{
+  "run_id": "eval_20260401_140255",
+  "timestamp": "2026-04-01T14:02:55.354539+00:00",
+  "scenarios_run": 1,
+  "per_scenario": [
+    {
+      "scenario_id": "1",
+      "description": "Clean kickoff meeting with clear scope decisions, NFRs, and explicit feature areas. Tests baseline story extraction, epic mapping to existing epics, and NFR identification.",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 0,
+          "partial": 0,
+          "missing": 0,
+          "extra": 11,
+          "total": 0,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 4.590909090909091,
+          "avg_clarity": 4.818181818181818,
+          "avg_actionability": 4.636363636363637,
+          "avg_completeness": 4.636363636363637,
+          "avg_criteria": 4.2727272727272725,
+          "status": "pass"
+        },
+        "M3_tag_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M4_epic_accuracy": {
+          "score": 1.0,
+          "correct": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.0,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 11,
+          "paraphrase": 0,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "fail",
+          "details": {
+            "accuracies": {
+              "high": null,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M10_quality_score": {
+          "status": "acceptable",
+          "ambiguity_delta": 2,
+          "actionability_match": true
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "M1_story_completeness": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M2_story_quality": {
+      "avg": 4.591,
+      "status": "pass"
+    },
+    "M3_tag_f1": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M4_epic_accuracy": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M5_check_precision": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M5_check_recall": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M5_check_f1": {
+      "avg": 0.0,
+      "status": "pass"
+    },
+    "M6_conflict_f1": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M7_grounding": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M9_hygiene_precision": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M8_calibration": {
+      "status": "fail",
+      "pass_count": 0,
+      "total": 1
+    },
+    "M10_quality_score": {
+      "status": "fail",
+      "pass_count": 0,
+      "total": 1
+    }
+  },
+  "overall_status": "fail",
+  "failures": [
+    "M3_tag_f1 aggregate is 0.00 \u2014 below threshold",
+    "M5_check_precision aggregate is 0.00 \u2014 below threshold",
+    "M5_check_recall aggregate is 0.00 \u2014 below threshold",
+    "M6_conflict_f1 aggregate is 0.00 \u2014 below threshold",
+    "M9_hygiene_precision aggregate is 0.00 \u2014 below threshold"
+  ],
+  "warnings": []
+}
