@@ -261,17 +261,31 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
 
     start = time.time()
 
-    # Load existing epics from backlog
+    # Load existing epics from epics table
+    from tools.db import execute_query
     try:
-        backlog = PgBacklogSource()
-        epic_items = backlog.get_epics()
+        epic_rows = execute_query(
+            "SELECT id, external_id, title, description FROM epics WHERE is_proposed = false ORDER BY id"
+        )
         existing_epics = [
-            {"id": e.id, "title": e.title, "description": e.description or ""}
-            for e in epic_items
+            {
+                "id": r[0],
+                "external_id": r[1] or "",
+                "title": r[2],
+                "description": (r[3] or "")[:200],
+            }
+            for r in epic_rows
         ]
+        # Build lookup: external_id -> epics.id for mapping LLM output
+        epic_id_lookup = {}
+        for e in existing_epics:
+            if e["external_id"]:
+                epic_id_lookup[e["external_id"].lower()] = e["id"]
+            epic_id_lookup[e["title"].lower()] = e["id"]
     except Exception as e:
         logger.warning("Failed to load epics: %s", e)
         existing_epics = []
+        epic_id_lookup = {}
 
     try:
         llm_result = _call_synthesis_llm(requirements, checks, context, existing_epics)
@@ -308,17 +322,50 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
     # Write stories to DB
     for story in candidate_stories:
         try:
+            # Resolve epic_id from LLM output to epics table ID
+            resolved_epic_id = None
+            raw_epic = getattr(story, 'epic_id', None)
+            proposed_epic_name = getattr(story, 'proposed_epic', None)
+
+            if raw_epic:
+                raw_key = str(raw_epic).lower().strip()
+                resolved_epic_id = epic_id_lookup.get(raw_key)
+                if not resolved_epic_id:
+                    # Try partial match
+                    for k, v in epic_id_lookup.items():
+                        if raw_key in k or k in raw_key:
+                            resolved_epic_id = v
+                            break
+
+            # If no existing epic matched but LLM proposed one, create it
+            if not resolved_epic_id and proposed_epic_name:
+                prop_key = proposed_epic_name.lower().strip()
+                resolved_epic_id = epic_id_lookup.get(prop_key)
+                if not resolved_epic_id:
+                    try:
+                        new_epic_id = execute_write(
+                            """INSERT INTO epics (title, status, is_proposed, proposed_by_meeting, proposal_justification)
+                               VALUES (%s, 'proposed', true, %s, %s) RETURNING id""",
+                            (proposed_epic_name, meeting_id, f"Auto-proposed: no existing epic matches for stories in this meeting"),
+                        )
+                        resolved_epic_id = new_epic_id
+                        epic_id_lookup[prop_key] = new_epic_id
+                        logger.info("Created proposed epic '%s' (id=%s)", proposed_epic_name, new_epic_id)
+                    except Exception as pe:
+                        logger.warning("Failed to create proposed epic: %s", pe)
+
             story_id = execute_write(
                 """
                 INSERT INTO stories
-                    (meeting_id, title, description, type, acceptance_criteria,
+                    (meeting_id, epic_id, title, description, type, acceptance_criteria,
                      feature_tags, priority_signals, confidence, source_citation,
                      status, original_content)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'generated', %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'generated', %s)
                 RETURNING id
                 """,
                 (
-                    meeting_id, story.title, story.description, story.type.value,
+                    meeting_id, resolved_epic_id,
+                    story.title, story.description, story.type.value,
                     json.dumps(story.acceptance_criteria),
                     json.dumps(story.feature_tags),
                     json.dumps([ps.model_dump() for ps in story.priority_signals]),
