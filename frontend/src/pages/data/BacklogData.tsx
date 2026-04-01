@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Table, Button, Upload, Select, Input, Tag, Skeleton, Empty, App, Modal, Descriptions } from 'antd';
 import { UploadOutlined, DownloadOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import type { FilterValue, SorterResult } from 'antd/es/table/interface';
+// table types handled by antd internally
 import { dataApi } from '../../services/api';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
