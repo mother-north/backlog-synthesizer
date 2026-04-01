@@ -57,9 +57,10 @@ interface StoryCardProps {
   onToggle?: () => void;
   onUpdate: () => void;
   userRoles: string[];
+  transcript?: string;
 }
 
-export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCardProps) {
+export default function StoryCard({ story, epics, onUpdate, userRoles, transcript }: StoryCardProps) {
   const [editing, setEditing] = useState(false);
   const [editDesc, setEditDesc] = useState(story.description);
   const [editCriteria, setEditCriteria] = useState(story.acceptance_criteria?.join('\n') || '');
@@ -68,6 +69,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
   const [confirmDialog, setConfirmDialog] = useState<'confirm' | 'reject' | 'save' | null>(null);
   const [resolvingCheckId, setResolvingCheckId] = useState<number | null>(null);
   const [viewBacklogItem, setViewBacklogItem] = useState<any>(null);
+  const [showTranscript, setShowTranscript] = useState(false);
   const { message } = App.useApp();
 
   const fetchBacklogItem = async (externalId: string) => {
@@ -215,11 +217,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
             <div style={{ fontSize: 12, color: 'var(--text-sec)', marginBottom: 4 }}>Source Citation</div>
             <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--gray-800)', margin: 0 }}>"{story.source_citation}"</p>
             <Button type="link" size="small" icon={<LinkOutlined />} style={{ paddingLeft: 0, marginTop: 4 }}
-              onClick={() => {
-                // Switch to Meeting Info tab with search query
-                window.history.replaceState(null, '', `#info`);
-                window.dispatchEvent(new CustomEvent('switchTab', { detail: { tab: 'info', search: story.source_citation?.slice(0, 50) } }));
-              }}>
+              onClick={() => setShowTranscript(true)}>
               View in transcript
             </Button>
           </div>
@@ -415,6 +413,40 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
             confirmText="Save"
             loading={saving}
           />
+
+          {/* Transcript Preview Modal */}
+          <Modal
+            title="Source in Transcript"
+            open={showTranscript}
+            onCancel={() => setShowTranscript(false)}
+            footer={<Button onClick={() => setShowTranscript(false)}>Close</Button>}
+            width={700}
+            destroyOnHidden
+          >
+            {transcript && story.source_citation ? (
+              <div style={{
+                maxHeight: 500,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                lineHeight: 1.8,
+                fontSize: 13,
+                padding: 16,
+                background: 'var(--gray-50)',
+                borderRadius: 8,
+              }}>
+                <span dangerouslySetInnerHTML={{
+                  __html: transcript.replace(
+                    new RegExp(`(${story.source_citation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 200)})`, 'gi'),
+                    '<mark style="background:#ffd591; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>'
+                  ),
+                }} />
+              </div>
+            ) : (
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray-400)' }}>
+                {!transcript ? 'Transcript not available' : 'No source citation for this story'}
+              </div>
+            )}
+          </Modal>
 
           {/* Backlog Item Preview Modal */}
           <Modal

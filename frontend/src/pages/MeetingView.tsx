@@ -581,6 +581,7 @@ export default function MeetingView() {
                           onToggle={() => {}}
                           onUpdate={fetchData}
                           userRoles={userRoles}
+                          transcript={meeting?.transcript}
                         />
                       ),
                       expandedRowKeys: expandedStory ? [expandedStory] : [],
