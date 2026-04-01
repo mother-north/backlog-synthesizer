@@ -9,11 +9,9 @@ import {
   CloseOutlined,
   ExclamationCircleOutlined,
   LinkOutlined,
-  DownOutlined,
-  RightOutlined,
 } from '@ant-design/icons';
 import { storiesApi } from '../services/api';
-import { statusColors, confidenceColors, groundingColors } from '../theme';
+import { statusColors, groundingColors } from '../theme';
 import CheckPanel from './CheckPanel';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -54,26 +52,13 @@ interface Story {
 interface StoryCardProps {
   story: Story;
   epics: Epic[];
-  expanded: boolean;
-  onToggle: () => void;
+  expanded?: boolean;
+  onToggle?: () => void;
   onUpdate: () => void;
   userRoles: string[];
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  feature: 'blue',
-  bug: 'red',
-  improvement: 'green',
-  task: 'default',
-  nfr: 'purple',
-  tech_debt: 'orange',
-};
-
-function formatStatus(status: string): string {
-  return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-export default function StoryCard({ story, epics, expanded, onToggle, onUpdate, userRoles }: StoryCardProps) {
+export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCardProps) {
   const [editing, setEditing] = useState(false);
   const [editDesc, setEditDesc] = useState(story.description);
   const [editCriteria, setEditCriteria] = useState(story.acceptance_criteria?.join('\n') || '');
@@ -141,46 +126,7 @@ export default function StoryCard({ story, epics, expanded, onToggle, onUpdate, 
 
   return (
     <div className="bs-story-card">
-      <div className="bs-story-card-header" onClick={onToggle}>
-        <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>
-          {expanded ? <DownOutlined /> : <RightOutlined />}
-        </span>
-        <span
-          className="status-badge"
-          style={{
-            background: `${statusColors[story.status] || 'var(--gray-400)'}20`,
-            color: statusColors[story.status] || 'var(--gray-400)',
-          }}
-        >
-          {formatStatus(story.status)}
-        </span>
-        <span style={{ flex: 1, fontWeight: 500 }}>{story.title}</span>
-        <Tag color={TYPE_COLORS[story.type] || 'default'}>{story.type}</Tag>
-        <Tooltip title={`Confidence: ${story.confidence}`}>
-          <span className="confidence-dot" style={{ background: confidenceColors[story.confidence] || 'var(--gray-400)' }} />
-        </Tooltip>
-        <Tooltip title={`Grounding: ${story.grounding_status}`}>
-          {story.grounding_status === 'valid' ? (
-            <CheckCircleOutlined style={{ color: groundingColors.valid }} />
-          ) : story.grounding_status === 'warning' ? (
-            <WarningOutlined style={{ color: groundingColors.warning }} />
-          ) : (
-            <CloseCircleOutlined style={{ color: groundingColors.invalid }} />
-          )}
-        </Tooltip>
-        {openChecks.length > 0 ? (
-          <Tag color="warning" style={{ margin: 0 }}>
-            <WarningOutlined /> {openChecks.length} open {openChecks.length === 1 ? 'check' : 'checks'}
-          </Tag>
-        ) : story.checks && story.checks.length > 0 ? (
-          <Tag color="success" style={{ margin: 0 }}>
-            <CheckCircleOutlined /> {story.checks.length} checks resolved
-          </Tag>
-        ) : null}
-      </div>
-
-      {expanded && (
-        <div className="bs-story-card-body" style={{ paddingTop: 16 }}>
+      <div className="bs-story-card-body" style={{ padding: '8px 0' }}>
           {/* Epic assignment */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 12, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Epic</label>
@@ -465,7 +411,6 @@ export default function StoryCard({ story, epics, expanded, onToggle, onUpdate, 
             loading={saving}
           />
         </div>
-      )}
     </div>
   );
 }
