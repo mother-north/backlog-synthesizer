@@ -61,13 +61,29 @@ def fuzzy_match(text_a: str, text_b: str) -> float:
 
 
 def normalize_tag(tag: str) -> str:
-    """Normalize a tag for comparison: lowercase, replace separators with underscores."""
-    return re.sub(r"[\s\-]+", "_", tag.strip().lower())
+    """Normalize a tag for comparison: lowercase, strip, remove hyphens/underscores."""
+    tag = tag.strip().lower()
+    # Remove hyphens and underscores so "risk-engine" == "risk engine" == "risk_engine"
+    tag = re.sub(r"[-_]", " ", tag)
+    # Collapse multiple spaces
+    tag = re.sub(r"\s+", " ", tag).strip()
+    return tag
 
 
 def normalize_tags(tags: list[str]) -> set[str]:
-    """Normalize a list of tags into a set."""
-    return {normalize_tag(t) for t in tags if t}
+    """Normalize a list of tags into a set.
+
+    Splits tags that contain commas or semicolons into multiple tags,
+    then normalizes each one.
+    """
+    expanded: list[str] = []
+    for t in tags:
+        if not t:
+            continue
+        # Split on commas or semicolons
+        parts = re.split(r"[,;]", t)
+        expanded.extend(parts)
+    return {normalize_tag(p) for p in expanded if p.strip()}
 
 
 def find_best_match(
@@ -146,14 +162,23 @@ def find_check(
     matched_story: dict,
     check_type: str,
 ) -> Optional[dict]:
-    """Find a system check matching a story + check_type."""
+    """Find a system check matching a story + check_type.
+
+    - Story title matching uses fuzzy match (ratio > 0.6).
+    - System check_type may be pipe-separated (e.g. "overlap|duplicate");
+      match if ANY part matches the golden check_type.
+    """
     story_title = matched_story.get("title", "").lower()
     for c in system_checks:
         c_story = c.get("story_title", "").lower()
         c_type = c.get("check_type", "")
-        if (fuzzy_match(c_story, story_title) > 0.7 or
-            story_title in c_story or c_story in story_title) and \
-           c_type == check_type:
+        # Fuzzy match story title (ratio > 0.6)
+        title_match = (fuzzy_match(c_story, story_title) > 0.6 or
+                       story_title in c_story or c_story in story_title)
+        # Split pipe-separated check_type and match if any part matches
+        c_type_parts = {part.strip() for part in c_type.split("|")}
+        type_match = check_type in c_type_parts
+        if title_match and type_match:
             return c
     return None
 

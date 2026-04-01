@@ -275,7 +275,16 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
 
     try:
         llm_result = _call_synthesis_llm(requirements, checks, context, existing_epics)
-        data = json.loads(llm_result["content"])
+        try:
+            data = json.loads(llm_result["content"])
+        except json.JSONDecodeError:
+            # Try with strict=False to handle unicode escape issues
+            try:
+                data = json.loads(llm_result["content"], strict=False)
+            except json.JSONDecodeError:
+                # Last resort: try to clean the content
+                cleaned = llm_result["content"].encode('utf-8', errors='replace').decode('utf-8')
+                data = json.loads(cleaned, strict=False)
 
         candidate_stories = _parse_stories(data, checks)
         epic_proposals = _parse_epic_proposals(data)

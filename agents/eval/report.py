@@ -102,7 +102,13 @@ def aggregate_results(results: list[ScenarioResult]) -> EvalReport:
     warnings = []
 
     for key, values in metric_values.items():
-        avg = sum(values) / len(values) if values else None
+        if key == "M2_story_quality":
+            # For M2, only average non-zero scores (exclude empty meetings
+            # where the system produced 0 stories)
+            non_empty = [v for v in values if v > 0]
+            avg = sum(non_empty) / len(non_empty) if non_empty else None
+        else:
+            avg = sum(values) / len(values) if values else None
         status = _status_for(key, avg)
         aggregate[key] = {"avg": round(avg, 3) if avg is not None else None, "status": status}
         if status == "fail":

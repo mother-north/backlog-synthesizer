@@ -181,6 +181,17 @@ async def run_pipeline_for_eval(golden: dict) -> dict:
     result = await validator_agent(state)
     state.update(result)
 
+    # After validator runs, read hygiene flags from DB
+    try:
+        from tools.db import execute_query
+        hygiene_rows = execute_query(
+            "SELECT * FROM backlog_hygiene_flags WHERE meeting_id = %s",
+            (meeting_id,)
+        )
+        hygiene_flags = [{"external_item_id": r[2], "flag_type": r[3], "reason": r[4]} for r in hygiene_rows]
+    except Exception:
+        hygiene_flags = []
+
     # Collect output in the format scorers expect
     stories = [s.model_dump(mode="json") if hasattr(s, "model_dump") else s
                for s in state.get("candidate_stories", [])]
@@ -194,7 +205,7 @@ async def run_pipeline_for_eval(golden: dict) -> dict:
         "checks": checks,
         "transcript": state.get("transcript", ""),
         "meeting_quality": meeting_quality,
-        "hygiene_flags": [],  # collected from DB if needed
+        "hygiene_flags": hygiene_flags,
     }
 
 

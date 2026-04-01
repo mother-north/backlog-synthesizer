@@ -1,0 +1,443 @@
+{
+  "run_id": "eval_20260401_143801",
+  "timestamp": "2026-04-01T14:38:01.250327+00:00",
+  "scenarios_run": 5,
+  "per_scenario": [
+    {
+      "scenario_id": "1",
+      "description": "Clean kickoff meeting with clear scope decisions, NFRs, and explicit feature areas. Tests baseline story extraction, epic mapping to existing epics, and NFR identification.",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 0,
+          "partial": 0,
+          "missing": 0,
+          "extra": 4,
+          "total": 0,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 4.5,
+          "avg_clarity": 4.75,
+          "avg_actionability": 4.5,
+          "avg_completeness": 4.5,
+          "avg_criteria": 4.25,
+          "status": "pass"
+        },
+        "M3_tag_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M4_epic_accuracy": {
+          "score": 1.0,
+          "correct": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.0,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 4,
+          "paraphrase": 0,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "fail",
+          "details": {
+            "accuracies": {
+              "high": null,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M10_quality_score": {
+          "status": "fail",
+          "ambiguity_delta": 3,
+          "actionability_match": false
+        }
+      }
+    },
+    {
+      "scenario_id": "2",
+      "description": "Risk scoring algorithm review meeting with mixed bugs and features. Tests type classification, duplicate detection (NaN bug overlaps ERIS-012), and architecture constraint detection (SQLite single-writer limitation).",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 0,
+          "partial": 0,
+          "missing": 0,
+          "extra": 6,
+          "total": 0,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 5.0,
+          "avg_clarity": 5,
+          "avg_actionability": 5,
+          "avg_completeness": 5,
+          "avg_criteria": 5,
+          "status": "pass"
+        },
+        "M3_tag_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M4_epic_accuracy": {
+          "score": 1.0,
+          "correct": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.0,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 4,
+          "paraphrase": 2,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "fail",
+          "details": {
+            "accuracies": {
+              "high": null,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M10_quality_score": {
+          "status": "pass",
+          "ambiguity_delta": 0,
+          "actionability_match": true
+        }
+      }
+    },
+    {
+      "scenario_id": "3",
+      "description": "User roles and access control meeting with ambiguous requirements, internal contradictions (3 vs 4 vs 5 roles), and conflict with Meeting 1 kickoff decisions on role structure. Tests prior decision conflict detection, ambiguity flagging, and internal contradiction handling.",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 0,
+          "partial": 0,
+          "missing": 0,
+          "extra": 9,
+          "total": 0,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 3.5833333333333335,
+          "avg_clarity": 4.111111111111111,
+          "avg_actionability": 3.4444444444444446,
+          "avg_completeness": 3.2222222222222223,
+          "avg_criteria": 3.5555555555555554,
+          "status": "acceptable"
+        },
+        "M3_tag_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M4_epic_accuracy": {
+          "score": 1.0,
+          "correct": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.0,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 9,
+          "paraphrase": 0,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "fail",
+          "details": {
+            "accuracies": {
+              "high": null,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M10_quality_score": {
+          "status": "acceptable",
+          "ambiguity_delta": 2,
+          "actionability_match": false
+        }
+      }
+    },
+    {
+      "scenario_id": "4",
+      "description": "Multi-LLM provider support meeting proposing a new feature area not covered by existing epics. Tests new epic proposal detection and inter-story dependency chain identification.",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 0,
+          "partial": 0,
+          "missing": 0,
+          "extra": 9,
+          "total": 0,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 3.888888888888889,
+          "avg_clarity": 4.222222222222222,
+          "avg_actionability": 4,
+          "avg_completeness": 3.6666666666666665,
+          "avg_criteria": 3.6666666666666665,
+          "status": "acceptable"
+        },
+        "M3_tag_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M4_epic_accuracy": {
+          "score": 1.0,
+          "correct": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.0,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 8,
+          "paraphrase": 1,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "fail",
+          "details": {
+            "accuracies": {
+              "high": null,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M10_quality_score": {
+          "status": "pass",
+          "ambiguity_delta": 0,
+          "actionability_match": true
+        }
+      }
+    },
+    {
+      "scenario_id": "5",
+      "description": "Empty/canceled meeting with no actionable content. Tests the system's handling of near-empty transcripts \u2014 should produce zero candidate stories and a meeting quality assessment reflecting no extractable requirements.",
+      "scores": {
+        "M1_story_completeness": {
+          "score": 1.0,
+          "matched": 0,
+          "partial": 0,
+          "missing": 0,
+          "extra": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M2_story_quality": {
+          "score": 0.0,
+          "avg_clarity": 0.0,
+          "avg_actionability": 0.0,
+          "avg_completeness": 0.0,
+          "avg_criteria": 0.0,
+          "status": "fail"
+        },
+        "M3_tag_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M4_epic_accuracy": {
+          "score": 1.0,
+          "correct": 0,
+          "total": 0,
+          "status": "pass"
+        },
+        "M5_check_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_recall": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M5_check_f1": {
+          "score": 0.0,
+          "status": "pass"
+        },
+        "M6_conflict_f1": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M7_grounding": {
+          "score": 1.0,
+          "valid": 0,
+          "paraphrase": 0,
+          "not_found": 0,
+          "status": "pass"
+        },
+        "M8_calibration": {
+          "status": "fail",
+          "details": {
+            "accuracies": {
+              "high": null,
+              "medium": null,
+              "low": null
+            }
+          }
+        },
+        "M9_hygiene_precision": {
+          "score": 0.0,
+          "status": "fail"
+        },
+        "M10_quality_score": {
+          "status": "pass",
+          "ambiguity_delta": 0,
+          "actionability_match": true
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "M1_story_completeness": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M2_story_quality": {
+      "avg": 4.243,
+      "status": "pass"
+    },
+    "M3_tag_f1": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M4_epic_accuracy": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M5_check_precision": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M5_check_recall": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M5_check_f1": {
+      "avg": 0.0,
+      "status": "pass"
+    },
+    "M6_conflict_f1": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M7_grounding": {
+      "avg": 1.0,
+      "status": "pass"
+    },
+    "M9_hygiene_precision": {
+      "avg": 0.0,
+      "status": "fail"
+    },
+    "M8_calibration": {
+      "status": "fail",
+      "pass_count": 0,
+      "total": 5
+    },
+    "M10_quality_score": {
+      "status": "pass",
+      "pass_count": 3,
+      "total": 5
+    }
+  },
+  "overall_status": "fail",
+  "failures": [
+    "M3_tag_f1 aggregate is 0.00 \u2014 below threshold",
+    "M5_check_precision aggregate is 0.00 \u2014 below threshold",
+    "M5_check_recall aggregate is 0.00 \u2014 below threshold",
+    "M6_conflict_f1 aggregate is 0.00 \u2014 below threshold",
+    "M9_hygiene_precision aggregate is 0.00 \u2014 below threshold"
+  ],
+  "warnings": []
+}
