@@ -328,6 +328,7 @@ export default function MeetingView() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/meetings')}>Meetings</Button>
+        <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)', fontSize: 14 }}>#{meeting.id}</span>
         <h1 style={{ flex: 1, fontSize: 20, fontWeight: 700, margin: 0 }}>{meeting.title}</h1>
         <Tag
           color={meeting.status === 'completed' ? 'success' : meeting.status === 'in_review' ? 'warning' : meeting.status === 'processing' ? 'processing' : 'default'}

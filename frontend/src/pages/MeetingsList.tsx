@@ -75,6 +75,14 @@ export default function MeetingsList() {
 
   const columns: ColumnsType<Meeting> = [
     {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 60,
+      sorter: (a, b) => a.id - b.id,
+      render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)' }}>{id}</span>,
+    },
+    {
       title: 'Title',
       dataIndex: 'title',
       key: 'title',
