@@ -270,10 +270,10 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
         )
         existing_epics = [
             {
-                "id": r[0],
-                "external_id": r[1] or "",
-                "title": r[2],
-                "description": (r[3] or "")[:200],
+                "id": r["id"],
+                "external_id": r.get("external_id") or "",
+                "title": r["title"],
+                "description": (r.get("description") or "")[:200],
             }
             for r in epic_rows
         ]

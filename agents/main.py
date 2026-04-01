@@ -109,8 +109,9 @@ def _make_progress_callback(meeting_id: int):
                 "UPDATE meetings SET pipeline_progress = %s::jsonb WHERE id = %s",
                 (json.dumps(progress_array), meeting_id),
             )
+            logger.info("Progress updated: %s", [s["status"] for s in progress_array])
         except Exception as e:
-            logger.debug("Progress DB write failed: %s", e)
+            logger.warning("Progress DB write failed: %s", e)
 
     return callback
 
