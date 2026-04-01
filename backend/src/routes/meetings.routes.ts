@@ -116,10 +116,9 @@ router.post('/:id/trigger', async (req: AuthRequest, res: Response) => {
     );
 
     // Proxy to FastAPI agents
-    const agentsResponse = await fetch(`${config.agentsUrl}/pipeline/trigger`, {
+    const agentsResponse = await fetch(`${config.agentsUrl}/pipeline/run/${meetingId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meeting_id: parseInt(meetingId) }),
     });
 
     if (!agentsResponse.ok) {

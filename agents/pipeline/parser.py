@@ -43,7 +43,8 @@ Output a JSON array of requirement objects. Each object has these fields:
   "confidence": "high | medium | low"
 }
 
-Return ONLY a JSON array. No markdown, no explanation.
+Return a JSON object with a single key "requirements" containing an array of requirement objects.
+Example: {"requirements": [{...}, {...}]}
 """
 
 client: OpenAI | None = None
@@ -70,6 +71,7 @@ async def _call_llm(transcript: str) -> dict:
             {"role": "user", "content": f"Meeting transcript:\n\n{transcript}"},
         ],
         temperature=0.1,
+        max_tokens=4096,
         response_format={"type": "json_object"},
     )
     content = resp.choices[0].message.content or "[]"

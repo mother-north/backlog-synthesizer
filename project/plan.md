@@ -94,10 +94,10 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 | 4.2 Core Agents | done |
 | 4.3 Memory & Observability | done |
 | 4.4 Eval Pipeline | done |
-| 4.5 Eval Run & Demo | not started |
-| 4.6 Exit: Final Check | not started |
+| 4.5 Eval Run & Demo | done |
+| 4.6 Exit: Final Check | done |
 
-**Current:** Phase 4 — Implementation (4.5 Eval Run & Demo)
+**Current:** COMPLETE — all phases done
 
 ---
 
