@@ -127,7 +127,7 @@ function ProcessingStatus({ meetingId, onComplete }: { meetingId: number; onComp
         const m = res.data?.rows?.[0] || res.data;
         const progress = m?.pipeline_progress || [];
         if (Array.isArray(progress) && progress.length > 0) {
-          setSteps(progress);
+          setSteps([...progress.map((s: any) => ({ ...s }))]);
         }
         if (m?.status && m.status !== 'processing') {
           clearInterval(timer);
