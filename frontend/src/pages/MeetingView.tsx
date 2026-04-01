@@ -111,6 +111,7 @@ export default function MeetingView() {
   const { id } = useParams<{ id: string }>();
   const meetingId = Number(id);
   const navigate = useNavigate();
+  const location = window.location;
   const { message } = App.useApp();
   const { user } = useAuthStore();
   const userRoles = user?.roles || [];
@@ -125,7 +126,15 @@ export default function MeetingView() {
   const [traces, setTraces] = useState<AgentTrace[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('info');
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = location.hash.replace('#', '');
+    return ['info', 'stories', 'epics', 'checks', 'audit', 'memo'].includes(hash) ? hash : 'info';
+  });
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    window.history.replaceState(null, '', `#${tab}`);
+  };
   const [expandedStory, setExpandedStory] = useState<number | null>(null);
   const [collapsedEpics, setCollapsedEpics] = useState<Set<number>>(new Set());
 
@@ -423,7 +432,7 @@ export default function MeetingView() {
       {/* Tabs */}
       <Tabs
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={handleTabChange}
         items={[
           {
             key: 'info',
