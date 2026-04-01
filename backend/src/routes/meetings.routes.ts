@@ -33,6 +33,47 @@ async function embedMeeting(meetingId: number, title: string, transcript: string
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// SSE progress endpoint — no auth required (EventSource can't send headers)
+router.get('/:id/progress', async (req, res) => {
+  const meetingId = req.params.id;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Poll DB for progress
+  let lastProgress = '';
+  const pollInterval = setInterval(async () => {
+    try {
+      const result = await query(
+        'SELECT pipeline_progress, status FROM meetings WHERE id = $1',
+        [meetingId]
+      );
+      if (result.rows.length === 0) {
+        clearInterval(pollInterval);
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Meeting not found' })}\n\n`);
+        res.end();
+        return;
+      }
+      const currentProgress = JSON.stringify(result.rows[0].pipeline_progress);
+      if (currentProgress !== lastProgress) {
+        lastProgress = currentProgress;
+        res.write(`data: ${JSON.stringify(result.rows[0].pipeline_progress || [])}\n\n`);
+      }
+      if (result.rows[0].status !== 'processing') {
+        clearInterval(pollInterval);
+        res.write(`data: ${JSON.stringify({ type: 'complete', status: result.rows[0].status })}\n\n`);
+        res.end();
+      }
+    } catch (e) {
+      logger.error('SSE poll error:', e);
+    }
+  }, 2000);
+
+  req.on('close', () => clearInterval(pollInterval));
+});
+
 router.use(authenticateToken);
 
 // List all meetings
@@ -175,8 +216,10 @@ router.post('/:id/trigger', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Get pipeline progress (SSE proxy to FastAPI)
-router.get('/:id/progress', async (req: AuthRequest, res: Response) => {
+// OLD progress route removed — moved before auth middleware
+// (kept as comment for reference)
+/*
+router.get('/:id/progress_old', async (req: AuthRequest, res: Response) => {
   const meetingId = req.params.id;
 
   // Set SSE headers
@@ -275,6 +318,7 @@ router.get('/:id/progress', async (req: AuthRequest, res: Response) => {
     res.end();
   }
 });
+*/
 
 // Get memos for a meeting
 router.get('/:id/memos', async (req, res) => {

@@ -44,8 +44,7 @@ export default function PipelineProgress({ meetingId, initialSteps, onComplete }
   );
 
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.BASE_URL + 'api');
-    const eventSource = new EventSource(`${baseUrl}/meetings/${meetingId}/progress`);
+    const eventSource = new EventSource(`/api/meetings/${meetingId}/progress`);
 
     eventSource.onmessage = (event) => {
       try {
