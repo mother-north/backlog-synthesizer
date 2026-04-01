@@ -113,9 +113,9 @@ export default function KnowledgeBase() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <Tag color="blue">{TYPE_ICONS[result.type] || result.type}</Tag>
-                {result.metadata?.title && (
+                {result.metadata && 'title' in result.metadata && result.metadata.title ? (
                   <span style={{ fontWeight: 500, color: 'var(--text)' }}>{String(result.metadata.title)}</span>
-                )}
+                ) : null}
                 <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
                   {result.score != null && !isNaN(result.score) ? `${Math.round(result.score * 100)}%` : ''} match
                 </span>
