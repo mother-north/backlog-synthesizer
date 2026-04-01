@@ -40,14 +40,38 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/data', dataLoadRoutes);
 
-// ── Access log (simple audit endpoint) ──────────
+// ── Access log ──────────
 import { authenticateToken } from './middleware/auth.js';
+import os from 'os';
+
+function normalizeIp(ip: string): string {
+  if (ip === '::1') return '127.0.0.1';
+  if (ip.startsWith('::ffff:')) return ip.slice(7);
+  return ip;
+}
+function getLanIp(): string {
+  for (const nets of Object.values(os.networkInterfaces())) {
+    for (const net of nets ?? []) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return '127.0.0.1';
+}
+function getClientIp(req: any): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) return normalizeIp(String(forwarded).split(',')[0].trim());
+  const ip = normalizeIp(req.ip || req.socket?.remoteAddress || 'unknown');
+  return ip === '127.0.0.1' ? getLanIp() : ip;
+}
+
 app.get('/api/access-log', authenticateToken, async (_req, res) => {
   try {
     const result = await (await import('./config/database.js')).query(
-      `SELECT a.*, u.email as user_email
+      `SELECT a.id, a.action, a.new_value, a.user_id, a.created_at,
+              u.email as user_email
        FROM audit_log a
        LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.entity_type = 'access'
        ORDER BY a.created_at DESC
        LIMIT 500`
     );
@@ -56,18 +80,25 @@ app.get('/api/access-log', authenticateToken, async (_req, res) => {
 });
 app.post('/api/access-log', authenticateToken, async (req: any, res) => {
   try {
+    const ip = getClientIp(req);
+    const menu = req.body.l0 === req.body.l1
+      ? req.body.l0
+      : `${req.body.l0} > ${req.body.l1}`;
     await (await import('./config/database.js')).query(
-      `INSERT INTO audit_log (entity_type, entity_id, action, new_value, user_id) VALUES ('access', 0, 'page_view', $1, $2)`,
-      [JSON.stringify(req.body), req.user?.id]
+      `INSERT INTO audit_log (entity_type, entity_id, action, new_value, user_id)
+       VALUES ('access', 0, $1, $2, $3)`,
+      [menu, JSON.stringify({ ip }), req.user?.id]
     );
-    res.json({ ok: true });
-  } catch { res.json({ ok: true }); }
+    res.status(204).end();
+  } catch { res.status(204).end(); }
 });
 app.delete('/api/access-log', authenticateToken, async (_req, res) => {
   try {
-    await (await import('./config/database.js')).query('DELETE FROM audit_log');
-    res.json({ ok: true });
-  } catch { res.json({ ok: true }); }
+    await (await import('./config/database.js')).query(
+      `DELETE FROM audit_log WHERE entity_type = 'access'`
+    );
+    res.status(204).end();
+  } catch { res.status(204).end(); }
 });
 
 // ── Pipeline proxy (all /api/pipeline/* → FastAPI) ──────────

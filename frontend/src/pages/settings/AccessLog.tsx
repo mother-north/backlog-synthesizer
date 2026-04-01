@@ -8,11 +8,9 @@ const { Text } = Typography;
 
 interface LogEntry {
   id: number;
-  entity_type: string;
-  action: string;
-  new_value: any;
-  user_id: number;
-  user_email?: string;
+  action: string;       // menu path (e.g. "Meetings" or "Settings > Users")
+  new_value: { ip?: string } | null;
+  user_email: string;
   created_at: string;
 }
 
@@ -49,12 +47,16 @@ export default function AccessLog() {
     }
   };
 
-  const uniqueActions = useMemo(() =>
-    [...new Set(entries.map(e => e.action))].sort().map(v => ({ text: v, value: v })),
+  const uniqueUsers = useMemo(() =>
+    [...new Set(entries.map(e => e.user_email).filter(Boolean))].sort().map(v => ({ text: v, value: v })),
     [entries]
   );
-  const uniqueTypes = useMemo(() =>
-    [...new Set(entries.map(e => e.entity_type))].sort().map(v => ({ text: v, value: v })),
+  const uniqueMenus = useMemo(() =>
+    [...new Set(entries.map(e => e.action).filter(Boolean))].sort().map(v => ({ text: v, value: v })),
+    [entries]
+  );
+  const uniqueIps = useMemo(() =>
+    [...new Set(entries.map(e => e.new_value?.ip).filter(Boolean))].sort().map(v => ({ text: v!, value: v! })),
     [entries]
   );
 
@@ -69,39 +71,34 @@ export default function AccessLog() {
       render: (d: string) => new Date(d).toLocaleString(),
     },
     {
-      title: 'Entity',
-      dataIndex: 'entity_type',
-      key: 'entity',
-      width: 120,
-      filters: uniqueTypes,
-      onFilter: (value, record) => record.entity_type === value,
+      title: 'User',
+      dataIndex: 'user_email',
+      key: 'user',
+      width: 240,
+      sorter: (a, b) => (a.user_email || '').localeCompare(b.user_email || ''),
+      filters: uniqueUsers,
+      filterSearch: true,
+      onFilter: (value, record) => record.user_email === value,
+    },
+    {
+      title: 'IP Address',
+      key: 'ip',
+      width: 140,
+      filters: uniqueIps,
+      onFilter: (value, record) => record.new_value?.ip === value,
+      render: (_: unknown, record: LogEntry) => {
+        const ip = record.new_value?.ip;
+        return ip ? <Text code style={{ fontSize: 12 }}>{ip}</Text> : '—';
+      },
     },
     {
       title: 'Action',
       dataIndex: 'action',
       key: 'action',
-      width: 180,
-      sorter: (a, b) => a.action.localeCompare(b.action),
-      filters: uniqueActions,
+      sorter: (a, b) => (a.action || '').localeCompare(b.action || ''),
+      filters: uniqueMenus,
+      filterSearch: true,
       onFilter: (value, record) => record.action === value,
-    },
-    {
-      title: 'Details',
-      dataIndex: 'new_value',
-      key: 'details',
-      ellipsis: true,
-      render: (v: any) => {
-        if (!v) return '—';
-        const str = typeof v === 'string' ? v : JSON.stringify(v);
-        return <Text code style={{ fontSize: 11 }}>{str.slice(0, 120)}{str.length > 120 ? '...' : ''}</Text>;
-      },
-    },
-    {
-      title: 'User',
-      dataIndex: 'user_email',
-      key: 'user',
-      width: 200,
-      render: (v: string, record: LogEntry) => v || `User #${record.user_id || '—'}`,
     },
   ];
 
@@ -132,7 +129,7 @@ export default function AccessLog() {
       </div>
 
       <div style={{ background: 'var(--blue-50)', border: '1px solid var(--blue-100)', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--gray-600)' }}>
-        Tracks all system activity: story confirmations, check resolutions, pipeline runs, data uploads, and page views.
+        Tracks user navigation events. Admin-only view.
         {entries.length > 0 && (
           <span style={{ marginLeft: 8 }}>
             {entries.length} {entries.length === 1 ? 'entry' : 'entries'}, newest first
