@@ -32,11 +32,12 @@ Your tasks:
    - source_citation (copied from the requirement — exact transcript quote)
    - priority_signals (copied from requirement)
 
-2. **Map to epics**:
-   - Match to existing epics by feature area/component. Set epic_id to the existing epic's external_id.
-   - If no existing epic fits, group related stories and propose a new epic.
-     Set proposed_epic to the new epic name.
-   - If a story can't map to any epic (existing or proposed), flag it.
+2. **Map to epics** (IMPORTANT — prefer existing epics):
+   - You MUST map each story to an existing epic from the list provided. Set epic_id to the existing epic's external_id (e.g., "ERIS-001").
+   - Use broad matching: a story about "risk scoring" maps to "Risk Assessment Engine" (ERIS-001), a story about "review queue" maps to "Review Queue" (ERIS-002), etc.
+   - ONLY propose a new epic if the story truly doesn't fit ANY existing epic. This should be rare.
+   - If proposing a new epic, set proposed_epic to the name and epic_id to null.
+   - Every story MUST have either epic_id or proposed_epic set — never leave both empty.
 
 3. **Attach checks** from cross-reference to relevant stories.
 
