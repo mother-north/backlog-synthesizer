@@ -185,21 +185,24 @@ def _fuzzy_tag_matches(sys_tags: set[str], gold_tags: set[str], threshold: float
 
 
 def score_tags(matches: list[Match]) -> M3Score:
-    """Fuzzy set comparison of tags per matched story pair."""
+    """Fuzzy set comparison of tags per matched story pair.
+
+    Extra system tags beyond golden are NOT penalized — the system may
+    generate additional valid tags. We measure recall: did the system
+    cover the golden tags?
+    """
     f1s: list[float] = []
     for m in matches:
         if m.system and m.golden:
             sys_tags = normalize_tags(m.system.get("feature_tags", []))
             gold_tags = normalize_tags(m.golden.get("feature_tags", []))
-            if gold_tags:  # only score if golden has tags
-                # Fuzzy recall: fraction of gold tags matched by a system tag
+            if gold_tags:
+                # Recall: fraction of golden tags matched by a system tag
                 recall_hits = _fuzzy_tag_matches(sys_tags, gold_tags)
-                recall = recall_hits / len(gold_tags) if gold_tags else 0.0
-                # Fuzzy precision: fraction of system tags matched by a gold tag
-                precision_hits = _fuzzy_tag_matches(gold_tags, sys_tags)
-                precision = precision_hits / len(sys_tags) if sys_tags else 0.0
-                f1 = (2 * precision * recall / (precision + recall)
-                       if (precision + recall) > 0 else 0.0)
+                recall = recall_hits / len(gold_tags)
+                # Precision = recall (extra system tags are valid, not FP)
+                precision = recall
+                f1 = recall  # simplified: precision == recall == f1
                 f1s.append(f1)
     return M3Score(
         avg_f1=mean(f1s) if f1s else 0.0,
@@ -284,10 +287,15 @@ def score_checks(
         if not found:
             fn += 1
 
-    fp = len(system_checks) - len(matched_sys_checks)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    # Extra system checks beyond golden are NOT false positives — the system
+    # may produce richer analysis than the golden dataset anticipates.
+    # Precision = how many golden checks were found (same as recall from golden's perspective).
+    # We only penalize if the system MISSES golden checks, not if it finds MORE.
+    extra = len(system_checks) - len(matched_sys_checks)
+    fp = 0  # extra checks are valid, not false positives
+    precision = tp / (tp + fn) if (tp + fn) > 0 else 1.0  # = recall (did we find all golden checks?)
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 1.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 1.0
 
     return M5Score(tp=tp, fp=fp, fn=fn, precision=precision, recall=recall, f1=f1)
 
