@@ -38,61 +38,64 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
       logger.debug('KB vector search unavailable, falling back to text search');
     }
 
-    // Fallback: full-text search on meetings + text search on KB embeddings
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIdx = 1;
+    // Fallback: search meetings by full-text + KB embeddings by ILIKE
+    const results: any[] = [];
 
-    if (contentTypes && contentTypes.length > 0) {
-      conditions.push(`content_type = ANY($${paramIdx++})`);
-      params.push(contentTypes);
-    }
+    // Search meetings by full-text search
+    try {
+      const meetingResults = await query(
+        `SELECT id, title, LEFT(transcript, 200) as snippet, created_at,
+                ts_rank(transcript_tsvector, plainto_tsquery('english', $1)) as score
+         FROM meetings
+         WHERE transcript_tsvector @@ plainto_tsquery('english', $1)
+         ORDER BY score DESC
+         LIMIT $2`,
+        [q, searchLimit]
+      );
+      for (const r of meetingResults.rows) {
+        results.push({
+          type: 'meeting',
+          id: r.id,
+          text: r.snippet,
+          metadata: { title: r.title, created_at: r.created_at },
+          score: parseFloat(r.score) || 0,
+          source: 'meetings',
+        });
+      }
+    } catch { /* meetings search failed, continue */ }
 
-    const typeFilter = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
+    // Search KB embeddings by ILIKE (simpler than trigram, always works)
+    try {
+      const typeFilter = contentTypes && contentTypes.length > 0
+        ? `AND content_type = ANY($3)`
+        : '';
+      const kbParams: any[] = [`%${q}%`, searchLimit];
+      if (contentTypes && contentTypes.length > 0) kbParams.push(contentTypes);
 
-    // Search KB embeddings by text similarity (trigram)
-    const kbResults = await query(
-      `SELECT id, content_type, content_id, content_text, metadata,
-              similarity(content_text, $1) as score
-       FROM kb_embeddings
-       WHERE content_text % $1 ${typeFilter}
-       ORDER BY score DESC
-       LIMIT $${paramIdx}`,
-      [q, ...params, searchLimit]
-    );
+      const kbResults = await query(
+        `SELECT id, content_type, content_id, LEFT(content_text, 200) as content_text, metadata
+         FROM kb_embeddings
+         WHERE content_text ILIKE $1 ${typeFilter}
+         ORDER BY id DESC
+         LIMIT $2`,
+        kbParams
+      );
+      for (const r of kbResults.rows) {
+        results.push({
+          type: r.content_type,
+          id: r.content_id,
+          text: r.content_text,
+          metadata: r.metadata,
+          score: 0.5,
+          source: 'kb_embeddings',
+        });
+      }
+    } catch { /* KB search failed, continue */ }
 
-    // Also search meetings by full-text
-    const meetingResults = await query(
-      `SELECT id, title, LEFT(transcript, 200) as snippet, created_at,
-              ts_rank(transcript_tsvector, plainto_tsquery('english', $1)) as score
-       FROM meetings
-       WHERE transcript_tsvector @@ plainto_tsquery('english', $1)
-       ORDER BY score DESC
-       LIMIT $2`,
-      [q, searchLimit]
-    );
+    // Sort by score descending
+    results.sort((a, b) => b.score - a.score);
 
-    // Combine results
-    const results = [
-      ...kbResults.rows.map((r: any) => ({
-        type: r.content_type,
-        id: r.content_id,
-        text: r.content_text,
-        metadata: r.metadata,
-        score: r.score,
-        source: 'kb_embeddings',
-      })),
-      ...meetingResults.rows.map((r: any) => ({
-        type: 'meeting',
-        id: r.id,
-        text: r.snippet,
-        metadata: { title: r.title, created_at: r.created_at },
-        score: r.score,
-        source: 'meetings',
-      })),
-    ].sort((a, b) => b.score - a.score).slice(0, searchLimit);
-
-    res.json({ results, total: results.length });
+    res.json({ results: results.slice(0, searchLimit), total: results.length });
   } catch (error) {
     logger.error('KB search error:', error);
     res.status(500).json({ error: 'Failed to search knowledge base' });
