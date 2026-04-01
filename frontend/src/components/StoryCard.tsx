@@ -125,35 +125,30 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
   };
 
   return (
-    <div style={{ borderTop: '1px solid var(--gray-200)', padding: '16px 8px' }}>
-          {/* Epic assignment */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Epic</label>
-            {editing ? (
-              <Select
-                value={editEpicId}
-                onChange={setEditEpicId}
-                style={{ width: 300 }}
-                placeholder="Select epic..."
-                allowClear
-                options={epics.map(e => ({
-                  value: e.id,
-                  label: `${e.title}${e.is_proposed ? ' (proposed)' : ''}${e.external_id ? ` (${e.external_id})` : ''}`,
-                }))}
-              />
-            ) : (
-              <span>
-                {story.epic ? (
-                  <>
-                    {story.epic.title}
-                    {story.epic.external_id && <span style={{ color: 'var(--text-sec)' }}> ({story.epic.external_id})</span>}
-                    {story.epic.is_proposed && <Tag color="orange" style={{ marginLeft: 8 }}>Proposed</Tag>}
-                  </>
-                ) : (
-                  <Tag color="red" icon={<ExclamationCircleOutlined />}>No Epic Assigned</Tag>
-                )}
-              </span>
-            )}
+    <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, padding: 16, margin: '8px 0', background: 'var(--white)' }}>
+          {/* Epic assignment — inline */}
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 13, color: 'var(--text-sec)', fontWeight: 500, whiteSpace: 'nowrap' }}>Epic:</label>
+            <Select
+              value={editEpicId || undefined}
+              onChange={(val) => {
+                setEditEpicId(val);
+                storiesApi.update(story.id, { epic_id: val || undefined }).then(() => {
+                  message.success('Epic updated');
+                  onUpdate();
+                }).catch(() => message.error('Failed to update epic'));
+              }}
+              style={{ minWidth: 300 }}
+              placeholder="Select epic..."
+              allowClear
+              size="small"
+              status={hasNoEpic ? 'error' : undefined}
+              options={epics.map(e => ({
+                value: e.id,
+                label: `${e.title}${e.is_proposed ? ' (proposed)' : ''}${e.external_id ? ` (${e.external_id})` : ''}`,
+              }))}
+            />
+            {hasNoEpic && <Tag color="red" icon={<ExclamationCircleOutlined />}>Required</Tag>}
           </div>
 
           {/* Description */}
