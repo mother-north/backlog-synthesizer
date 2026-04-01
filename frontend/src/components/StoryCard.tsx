@@ -126,7 +126,10 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
 
   return (
     <div className="bs-story-card">
-      <div className="bs-story-card-body" style={{ padding: '8px 0' }}>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12, color: 'var(--text)' }}>
+        #{story.id} — {story.title}
+      </div>
+      <div className="bs-story-card-body" style={{ padding: '0' }}>
           {/* Epic assignment */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 12, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Epic</label>
