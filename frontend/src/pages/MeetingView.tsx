@@ -122,7 +122,7 @@ export default function MeetingView() {
   const [traces, setTraces] = useState<AgentTrace[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('stories');
+  const [activeTab, setActiveTab] = useState('info');
   const [expandedStory, setExpandedStory] = useState<number | null>(null);
   const [collapsedEpics, setCollapsedEpics] = useState<Set<number>>(new Set());
 
@@ -352,6 +352,68 @@ export default function MeetingView() {
         onChange={setActiveTab}
         items={[
           {
+            key: 'info',
+            label: 'Meeting Info',
+            children: (
+              <div>
+                <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, marginBottom: 16 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px 16px', fontSize: 14 }}>
+                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>Title:</span>
+                    <span>{meeting.title}</span>
+                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>Uploaded:</span>
+                    <span>{new Date(meeting.created_at).toLocaleString()} {meeting.uploaded_by_name ? `by ${meeting.uploaded_by_name}` : ''}</span>
+                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>File:</span>
+                    <span>{meeting.file_name || 'Pasted text'}</span>
+                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>Status:</span>
+                    <span>
+                      <Tag color={meeting.status === 'completed' ? 'success' : meeting.status === 'in_review' ? 'warning' : 'processing'}>
+                        {formatStatus(meeting.status)}
+                      </Tag>
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Transcript</div>
+                <div style={{ marginBottom: 8 }}>
+                  <Input
+                    prefix={<SearchOutlined />}
+                    placeholder="Search transcript..."
+                    value={transcriptSearch}
+                    onChange={e => setTranscriptSearch(e.target.value)}
+                    allowClear
+                    style={{ width: 300 }}
+                  />
+                </div>
+                <div style={{
+                  background: 'var(--white)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: 20,
+                  maxHeight: 500,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  lineHeight: 1.8,
+                  fontSize: 14,
+                }}>
+                  {meeting.transcript ? (
+                    transcriptSearch ? (
+                      <span dangerouslySetInnerHTML={{
+                        __html: meeting.transcript.replace(
+                          new RegExp(`(${transcriptSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                          '<mark style="background:#ffd591">$1</mark>'
+                        ),
+                      }} />
+                    ) : (
+                      meeting.transcript
+                    )
+                  ) : (
+                    <Empty description="Transcript not available" />
+                  )}
+                </div>
+              </div>
+            ),
+          },
+          {
             key: 'stories',
             label: `Stories (${stories.length})`,
             children: (
@@ -473,8 +535,32 @@ export default function MeetingView() {
             ),
           },
           {
+            key: 'epics',
+            label: `Epics (${epics.length})`,
+            children: (
+              <div>
+                {epics.length === 0 ? (
+                  <Empty description="No epics found for this meeting" />
+                ) : (
+                  <Table
+                    dataSource={epics}
+                    rowKey="id"
+                    pagination={false}
+                    columns={[
+                      { title: 'ID', dataIndex: 'external_id', key: 'id', width: 100, render: (v: string) => v || '-' },
+                      { title: 'Title', dataIndex: 'title', key: 'title' },
+                      { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v: string) => <Tag color={v === 'active' ? 'green' : v === 'proposed' ? 'blue' : 'default'}>{v}</Tag> },
+                      { title: 'Proposed', dataIndex: 'is_proposed', key: 'proposed', width: 100, render: (v: boolean) => v ? <Tag color="blue">Yes</Tag> : 'No' },
+                      { title: 'Stories', key: 'stories', width: 80, render: (_: unknown, record: any) => stories.filter(s => s.epic_id === record.id).length },
+                    ]}
+                  />
+                )}
+              </div>
+            ),
+          },
+          {
             key: 'checks',
-            label: `Checks (${checks.filter(c => c.status === 'open').length} open)`,
+            label: `Checks (${checks.filter((c: any) => c.status === 'open').length} open)`,
             children: (
               <div>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
@@ -640,68 +726,6 @@ export default function MeetingView() {
                     }))}
                   />
                 )}
-              </div>
-            ),
-          },
-          {
-            key: 'info',
-            label: 'Meeting Info',
-            children: (
-              <div>
-                <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, marginBottom: 16 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px 16px', fontSize: 14 }}>
-                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>Title:</span>
-                    <span>{meeting.title}</span>
-                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>Uploaded:</span>
-                    <span>{new Date(meeting.created_at).toLocaleString()} {meeting.uploaded_by_name ? `by ${meeting.uploaded_by_name}` : ''}</span>
-                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>File:</span>
-                    <span>{meeting.file_name || 'Pasted text'}</span>
-                    <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>Status:</span>
-                    <span>
-                      <Tag color={meeting.status === 'completed' ? 'success' : meeting.status === 'in_review' ? 'warning' : 'processing'}>
-                        {formatStatus(meeting.status)}
-                      </Tag>
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Transcript</div>
-                <div style={{ marginBottom: 8 }}>
-                  <Input
-                    prefix={<SearchOutlined />}
-                    placeholder="Search transcript..."
-                    value={transcriptSearch}
-                    onChange={e => setTranscriptSearch(e.target.value)}
-                    allowClear
-                    style={{ width: 300 }}
-                  />
-                </div>
-                <div style={{
-                  background: 'var(--white)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: 20,
-                  maxHeight: 500,
-                  overflow: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.8,
-                  fontSize: 14,
-                }}>
-                  {meeting.transcript ? (
-                    transcriptSearch ? (
-                      <span dangerouslySetInnerHTML={{
-                        __html: meeting.transcript.replace(
-                          new RegExp(`(${transcriptSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                          '<mark style="background:#ffd591">$1</mark>'
-                        ),
-                      }} />
-                    ) : (
-                      meeting.transcript
-                    )
-                  ) : (
-                    <Empty description="Transcript not available" />
-                  )}
-                </div>
               </div>
             ),
           },
