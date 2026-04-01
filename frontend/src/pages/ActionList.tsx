@@ -154,7 +154,7 @@ export default function ActionList() {
         <Table
           dataSource={filtered}
           columns={columns}
-          rowKey={(record, index) => `${record.type}-${record.check_id || record.story_id}-${record.meeting_id}-${index}`}
+          rowKey={(record) => `${record.type}-${record.check_id || ''}-${record.story_id || ''}-${record.meeting_id}-${record.created_at}`}
           onRow={(record) => ({
             onClick: () => navigate(`/meetings/${record.meeting_id}?story=${record.story_id}`),
             style: { cursor: 'pointer' },
