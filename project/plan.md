@@ -58,18 +58,18 @@ Every step: **AI Explore → Build → AI Review → Gate Check**
 
 ### Exit Criteria
 
-- [ ] AI prompts and iterations documented in every deliverable
-- [ ] Architecture diagram with agent roles, tool interfaces, memory
-- [ ] Planned interactions, tool outputs, trace paths
-- [ ] Metrics defined + golden dataset (3-5 scenarios)
-- [ ] At least one automated evaluation implemented and run
-- [ ] Multi-agent framework working
-- [ ] Memory persists across stages
-- [ ] Modular tool abstractions (all mocked)
-- [ ] Error handling and retry logic
-- [ ] Audit logs show how conclusions were reached
-- [ ] AI usage documented throughout SDLC
-- [ ] Working demo
+- [x] AI prompts and iterations documented in every deliverable
+- [x] Architecture diagram with agent roles, tool interfaces, memory
+- [x] Planned interactions, tool outputs, trace paths
+- [x] Metrics defined + golden dataset (3-5 scenarios)
+- [x] At least one automated evaluation implemented and run (eval pipeline ran on scenarios 1+5, report generated)
+- [x] Multi-agent framework working (6-agent LangGraph pipeline, 13 stories from meeting 1)
+- [x] Memory persists across stages (pgvector KB, LangGraph state, PostgreSQL)
+- [x] Modular tool abstractions (IBacklogSource, IArchitectureSource ABCs)
+- [x] Error handling and retry logic (tenacity, error accumulation)
+- [x] Audit logs show how conclusions were reached (agent_traces: 5 rows for meeting 1)
+- [x] AI usage documented throughout SDLC
+- [x] Working demo (backend + frontend + agents build and run, pipeline processes meetings)
 
 ---
 
