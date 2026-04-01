@@ -330,11 +330,27 @@ export default function MeetingView() {
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/meetings')}>Meetings</Button>
         <h1 style={{ flex: 1, fontSize: 20, fontWeight: 700, margin: 0 }}>{meeting.title}</h1>
         <Tag
-          color={meeting.status === 'completed' ? 'success' : meeting.status === 'in_review' ? 'warning' : 'processing'}
+          color={meeting.status === 'completed' ? 'success' : meeting.status === 'in_review' ? 'warning' : meeting.status === 'processing' ? 'processing' : 'default'}
           style={{ fontSize: 13, padding: '4px 12px' }}
         >
           {formatStatus(meeting.status)}
         </Tag>
+        {(meeting.status === 'uploaded' || meeting.status === 'processing') && !isProcessing && (
+          <Button
+            type="primary"
+            onClick={async () => {
+              try {
+                await meetingsApi.trigger(meetingId);
+                message.success('Pipeline started');
+                fetchData();
+              } catch {
+                message.error('Failed to start pipeline');
+              }
+            }}
+          >
+            Process Meeting
+          </Button>
+        )}
       </div>
 
       {/* Pipeline progress */}

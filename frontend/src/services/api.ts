@@ -107,6 +107,7 @@ export const meetingsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  trigger: (id: number) => api.post(`/meetings/${id}/trigger`),
   getProgress: (id: number) => api.get(`/meetings/${id}/progress`),
   delete: (id: number) => api.delete(`/meetings/${id}`),
 };
