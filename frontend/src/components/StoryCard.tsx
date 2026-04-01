@@ -64,7 +64,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
   const [editCriteria, setEditCriteria] = useState(story.acceptance_criteria?.join('\n') || '');
   const [editEpicId, setEditEpicId] = useState(story.epic_id);
   const [saving, setSaving] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<'confirm' | 'reject' | 'escalate' | 'save' | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<'confirm' | 'reject' | 'save' | null>(null);
   const [resolvingCheckId, setResolvingCheckId] = useState<number | null>(null);
   const { message } = App.useApp();
 
@@ -113,16 +113,6 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
     setConfirmDialog(null);
   };
 
-  const handleEscalate = async () => {
-    try {
-      await storiesApi.escalate(story.id);
-      message.warning('Story flagged for escalation');
-      onUpdate();
-    } catch {
-      message.error('Failed to escalate story');
-    }
-    setConfirmDialog(null);
-  };
 
   return (
     <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, padding: 16, margin: '8px 0', background: 'var(--white)' }}>
@@ -356,13 +346,6 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
               >
                 Reject
               </Button>
-              <Button
-                icon={<ExclamationCircleOutlined />}
-                onClick={() => setConfirmDialog('escalate')}
-                disabled={story.status === 'confirmed' || story.status === 'rejected'}
-              >
-                Flag for Escalation
-              </Button>
             </Space>
           )}
 
@@ -386,14 +369,6 @@ export default function StoryCard({ story, epics, onUpdate, userRoles }: StoryCa
             requireInput
             inputLabel="Rationale (required)"
             inputPlaceholder="Enter reason for rejection..."
-          />
-          <ConfirmDialog
-            open={confirmDialog === 'escalate'}
-            title="Flag for Escalation"
-            message="Flag this story for escalation? It will be marked as pending decision."
-            onConfirm={handleEscalate}
-            onCancel={() => setConfirmDialog(null)}
-            confirmText="Escalate"
           />
           <ConfirmDialog
             open={confirmDialog === 'save'}
