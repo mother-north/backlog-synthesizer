@@ -9,7 +9,7 @@ import {
 
 interface PipelineStep {
   agent: string;
-  status: 'done' | 'running' | 'pending' | 'error';
+  status: 'done' | 'running' | 'pending' | 'error' | 'waiting';
   message: string;
 }
 
@@ -21,11 +21,14 @@ const AGENT_LABELS: Record<string, string> = {
   validator: 'Validating grounding and citations',
 };
 
+const AGENT_ORDER = ['parser', 'retriever', 'crossref', 'synthesizer', 'validator'];
+
 const STATUS_ICONS: Record<string, React.ReactNode> = {
-  done: <CheckCircleOutlined style={{ color: 'var(--success)' }} />,
-  running: <LoadingOutlined style={{ color: 'var(--accent)' }} spin />,
-  pending: <ClockCircleOutlined style={{ color: 'var(--gray-400)' }} />,
-  error: <CloseCircleOutlined style={{ color: 'var(--error)' }} />,
+  done: <CheckCircleOutlined style={{ color: '#52c41a' }} />,
+  running: <LoadingOutlined style={{ color: '#3d8bfd' }} spin />,
+  pending: <ClockCircleOutlined style={{ color: '#9a9aad' }} />,
+  waiting: <ClockCircleOutlined style={{ color: '#9a9aad' }} />,
+  error: <CloseCircleOutlined style={{ color: '#ff4d4f' }} />,
 };
 
 interface PipelineProgressProps {
@@ -36,7 +39,7 @@ interface PipelineProgressProps {
 
 export default function PipelineProgress({ meetingId, initialSteps, onComplete }: PipelineProgressProps) {
   const [steps, setSteps] = useState<PipelineStep[]>(
-    initialSteps || Object.keys(AGENT_LABELS).map(agent => ({
+    initialSteps || AGENT_ORDER.map(agent => ({
       agent,
       status: 'pending' as const,
       message: AGENT_LABELS[agent],
@@ -49,28 +52,44 @@ export default function PipelineProgress({ meetingId, initialSteps, onComplete }
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (Array.isArray(data)) {
-          setSteps(data);
-          const allDone = data.every((s: PipelineStep) => s.status === 'done');
+
+        // Complete event
+        if (data.type === 'complete') {
+          setSteps(prev => prev.map(s => ({ ...s, status: 'done' as const, message: AGENT_LABELS[s.agent] + ' — done' })));
+          if (onComplete) setTimeout(() => onComplete(), 1000);
+          eventSource.close();
+          return;
+        }
+
+        // Error event
+        if (data.type === 'error') {
+          eventSource.close();
+          return;
+        }
+
+        // Full progress array from DB poll
+        if (Array.isArray(data) && data.length > 0 && data[0]?.agent) {
+          setSteps(data.map((s: any) => ({
+            agent: s.agent,
+            status: s.status || 'pending',
+            message: s.message || AGENT_LABELS[s.agent] || s.agent,
+          })));
+
+          const allDone = data.every((s: any) => s.status === 'done');
           if (allDone && onComplete) {
-            onComplete();
+            setTimeout(() => onComplete(), 1000);
             eventSource.close();
           }
-        } else if (data.agent) {
+          return;
+        }
+
+        // Single agent event
+        if (data.agent) {
           setSteps(prev => prev.map(s =>
-            s.agent === data.agent ? { ...s, status: data.status, message: data.message || s.message } : s
+            s.agent === data.agent
+              ? { ...s, status: data.status, message: data.message || AGENT_LABELS[s.agent] || s.agent }
+              : s
           ));
-          if (data.status === 'done') {
-            // Check if this was the last step
-            setSteps(prev => {
-              const allDone = prev.every(s => s.status === 'done');
-              if (allDone && onComplete) {
-                setTimeout(() => onComplete(), 500);
-                eventSource.close();
-              }
-              return prev;
-            });
-          }
         }
       } catch {
         // ignore parse errors
@@ -87,21 +106,62 @@ export default function PipelineProgress({ meetingId, initialSteps, onComplete }
   }, [meetingId, onComplete]);
 
   const doneCount = steps.filter(s => s.status === 'done').length;
+  const runningStep = steps.find(s => s.status === 'running');
   const percent = Math.round((doneCount / steps.length) * 100);
 
   return (
-    <div className="bs-pipeline-progress">
-      <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 14 }}>Processing Pipeline</div>
+    <div style={{
+      background: 'var(--white)',
+      border: '1px solid var(--blue-100)',
+      borderRadius: 8,
+      padding: 20,
+      marginBottom: 16,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Processing Pipeline</div>
+        {runningStep && (
+          <div style={{ fontSize: 13, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <LoadingOutlined spin />
+            {runningStep.message}
+          </div>
+        )}
+      </div>
+
       {steps.map(step => (
-        <div key={step.agent} className={`bs-pipeline-step ${step.status}`}>
+        <div
+          key={step.agent}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 0',
+            borderBottom: '1px solid var(--gray-100)',
+            opacity: step.status === 'pending' ? 0.5 : 1,
+            fontWeight: step.status === 'running' ? 600 : 400,
+          }}
+        >
           <span style={{ width: 20, display: 'flex', justifyContent: 'center' }}>
-            {STATUS_ICONS[step.status]}
+            {STATUS_ICONS[step.status] || STATUS_ICONS.pending}
           </span>
-          <span style={{ flex: 1 }}>{step.message}</span>
-          <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>{step.status}</span>
+          <span style={{ flex: 1, fontSize: 13 }}>{step.message}</span>
+          <span style={{
+            fontSize: 11,
+            padding: '2px 8px',
+            borderRadius: 4,
+            background: step.status === 'done' ? '#f6ffed' : step.status === 'running' ? '#e8f0fe' : 'transparent',
+            color: step.status === 'done' ? '#52c41a' : step.status === 'running' ? '#0033A0' : '#9a9aad',
+          }}>
+            {step.status}
+          </span>
         </div>
       ))}
-      <Progress percent={percent} strokeColor="var(--primary)" style={{ marginTop: 12 }} />
+
+      <Progress
+        percent={percent}
+        strokeColor="#0033A0"
+        style={{ marginTop: 16 }}
+        format={() => `${doneCount}/${steps.length} steps`}
+      />
     </div>
   );
 }

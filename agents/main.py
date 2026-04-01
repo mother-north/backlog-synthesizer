@@ -79,27 +79,39 @@ def _get_graph():
 # Progress callback factory
 # ---------------------------------------------------------------------------
 
+_AGENT_ORDER = ["parser", "retriever", "crossref", "synthesizer", "validator"]
+
 def _make_progress_callback(meeting_id: int):
-    """Return a callback that pushes progress events into the meeting's queue."""
+    """Return a callback that pushes progress events and updates DB progress."""
+    # Track state per agent
+    progress_state: dict[str, dict] = {
+        agent: {"agent": agent, "status": "pending", "message": ""}
+        for agent in _AGENT_ORDER
+    }
+
     def callback(event: dict):
+        agent = event.get("agent", "")
+        if agent in progress_state:
+            progress_state[agent] = event
+
+        # Push to SSE queue
         q = _progress_queues.get(meeting_id)
         if q is not None:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
                 pass
-        # Also persist to DB for reconnection
+
+        # Write full progress array to DB
         try:
+            progress_array = [progress_state[a] for a in _AGENT_ORDER]
             execute_write(
-                """
-                UPDATE meetings
-                SET pipeline_progress = COALESCE(pipeline_progress, '[]'::jsonb) || %s::jsonb
-                WHERE id = %s
-                """,
-                (json.dumps([event]), meeting_id),
+                "UPDATE meetings SET pipeline_progress = %s::jsonb WHERE id = %s",
+                (json.dumps(progress_array), meeting_id),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Progress DB write failed: %s", e)
+
     return callback
 
 
