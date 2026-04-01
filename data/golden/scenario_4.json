@@ -1,0 +1,201 @@
+{
+  "scenario_id": 4,
+  "description": "Multi-LLM provider support meeting proposing a new feature area not covered by existing epics. Tests new epic proposal detection and inter-story dependency chain identification.",
+  "inputs": {
+    "meeting": "data/meeting_notes/04_multi_llm.md",
+    "architecture": "data/architecture/eris_architecture.md",
+    "backlog": "data/backlog/backlog_items.json"
+  },
+  "use_cases_tested": ["UC-6", "UC-10"],
+  "expected_output": {
+    "candidate_stories": [
+      {
+        "title": "Build LLM provider abstraction layer with common interface",
+        "type": "feature",
+        "description": "Create an LLMProvider interface with methods evaluate, testConnection, and getAvailableModels. Replace the current if-else conditional logic in AIService with a strategy pattern where each provider implements the common interface. This is the foundation for all multi-provider work.",
+        "acceptance_criteria": [
+          "LLMProvider interface defined with evaluate, testConnection, getAvailableModels methods",
+          "AIService refactored to delegate to provider implementations via the interface",
+          "Factory logic instantiates the correct provider based on configuration",
+          "Existing Claude and OpenAI functionality is not broken during refactoring"
+        ],
+        "feature_tags": ["llm", "architecture", "abstraction"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Mike: 'blocking dependency for all other provider work'", "Phase 1 deliverable, estimated 3 days"],
+        "confidence": "high",
+        "source_citation": "Mike: 'a common interface — call it an LLMProvider interface — with methods like evaluate, testConnection, and getAvailableModels. Each provider gets its own implementation class.' ... 'we need the provider abstraction layer before we can add Gemini properly.'"
+      },
+      {
+        "title": "Migrate Claude integration to new provider abstraction",
+        "type": "feature",
+        "description": "Refactor the existing Anthropic Claude integration code into an AnthropicProvider class implementing the LLMProvider interface. Move existing conditional Claude logic from AIService into the new class.",
+        "acceptance_criteria": [
+          "AnthropicProvider class implements LLMProvider interface",
+          "All existing Claude functionality preserved (evaluate, test connection, model selection)",
+          "Claude-specific response parsing moved into the provider class",
+          "Unit tests validate Claude provider independently"
+        ],
+        "feature_tags": ["llm", "claude", "refactoring"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Phase 2 deliverable, estimated 2 days", "Can be done in parallel with OpenAI migration"],
+        "confidence": "high",
+        "source_citation": "Mike: 'I want to refactor the existing Claude and OpenAI code into the new pattern first, then add Gemini on top of that clean foundation.' ... 'the Claude and OpenAI migrations can happen in parallel since they're independent.'"
+      },
+      {
+        "title": "Migrate OpenAI integration to new provider abstraction",
+        "type": "feature",
+        "description": "Refactor the existing OpenAI integration code into an OpenAIProvider class implementing the LLMProvider interface. Move existing conditional OpenAI logic from AIService into the new class.",
+        "acceptance_criteria": [
+          "OpenAIProvider class implements LLMProvider interface",
+          "All existing OpenAI functionality preserved",
+          "OpenAI-specific response parsing moved into the provider class",
+          "Unit tests validate OpenAI provider independently"
+        ],
+        "feature_tags": ["llm", "openai", "refactoring"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Phase 2 deliverable, estimated 2 days", "Can be done in parallel with Claude migration"],
+        "confidence": "high",
+        "source_citation": "Mike: 'the Claude and OpenAI migrations can happen in parallel since they're independent.'"
+      },
+      {
+        "title": "Add Google Gemini as a new LLM provider",
+        "type": "feature",
+        "description": "Implement GeminiProvider class for the Google Gemini AI SDK, handling its different response format. This requires the abstraction layer to be in place first.",
+        "acceptance_criteria": [
+          "GeminiProvider class implements LLMProvider interface",
+          "Gemini Pro and Gemini Ultra models are supported",
+          "Response format normalization handles Gemini's different output structure",
+          "Connection test works with Google AI API key"
+        ],
+        "feature_tags": ["llm", "gemini", "integration"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Phase 3 deliverable, estimated 4 days", "Google AI SDK has different response format — more complex"],
+        "confidence": "high",
+        "source_citation": "Alex: 'Phase 3 is trickier for Gemini because the Google AI SDK has a different response format. I'd say four days for Gemini and two for Azure since we can reuse the OpenAI patterns.'"
+      },
+      {
+        "title": "Add Azure OpenAI as a new LLM provider",
+        "type": "feature",
+        "description": "Implement AzureOpenAIProvider class as a variant of OpenAIProvider with different authentication and endpoint configuration. Required for government clients with data residency mandates.",
+        "acceptance_criteria": [
+          "AzureOpenAIProvider class implements LLMProvider interface",
+          "Azure-specific authentication and endpoint configuration supported",
+          "Reuses OpenAI SDK patterns where applicable",
+          "Connection test validates Azure-specific credentials"
+        ],
+        "feature_tags": ["llm", "azure", "integration"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Government data residency requirement", "Phase 3 deliverable, estimated 2 days"],
+        "confidence": "high",
+        "source_citation": "Mike: 'Azure OpenAI comes after Gemini because it's essentially a variant of the OpenAI provider with different authentication and endpoint configuration.' ... 'some government clients have mandates about which AI providers they can use — some can only use Azure OpenAI because of data residency requirements.'"
+      },
+      {
+        "title": "Implement automatic failover from primary to secondary provider",
+        "type": "feature",
+        "description": "When the primary LLM provider fails (rate limit, outage, error), automatically retry the evaluation with the configured fallback provider. Simple try-primary-then-try-fallback logic for v1, without circuit breakers.",
+        "acceptance_criteria": [
+          "Primary and fallback providers are configurable in settings",
+          "On primary provider API error, system automatically retries with fallback",
+          "Failover attempt is logged for monitoring",
+          "Failover does not retry on non-transient errors (auth failures)"
+        ],
+        "feature_tags": ["llm", "reliability", "failover"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Mike: 'I'd call it essential'", "Core requirement for multi-provider value proposition"],
+        "confidence": "high",
+        "source_citation": "Mike: 'I'd call it essential. The whole point of having multiple providers is resilience. If we can't fail over automatically, operators have to manually switch in the settings when there's an outage.' Alex: 'let's do simple failover: if the primary returns an error on the API call, try the fallback. No fancy circuit breakers, no health checking, just try-primary-then-try-fallback.'"
+      },
+      {
+        "title": "Expose provider capability metadata (context window, rate limits)",
+        "type": "feature",
+        "description": "Each provider implementation must expose a getCapabilities method returning metadata such as max tokens, context window size, rate limits, and supported features. The evaluation pipeline uses this to validate requests before sending.",
+        "acceptance_criteria": [
+          "Each provider class implements getCapabilities method",
+          "Capabilities include: max tokens, context window size, rate limits",
+          "Evaluation pipeline checks document size against context window before calling LLM",
+          "Capability data is available to the settings UI for display"
+        ],
+        "feature_tags": ["llm", "metadata", "validation"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Decision 5 in meeting summary"],
+        "confidence": "high",
+        "source_citation": "Mike: 'Each provider has different capabilities — different context windows, different token limits, different rate limits. The abstraction layer needs to expose this metadata so the evaluation pipeline can make decisions. For example, if someone uploads a 200-page PDF, we need to know if the selected model can handle that much text in its context window.'"
+      },
+      {
+        "title": "Redesign multi-provider configuration UI",
+        "type": "feature",
+        "description": "Redesign the LLM settings UI to support simultaneous configuration of all four providers with individual API keys, model selections, and primary/fallback designation. Currently the UI supports only a single provider.",
+        "acceptance_criteria": [
+          "Settings UI shows configuration for all four providers simultaneously",
+          "Each provider has its own API key, model selection, and connection test",
+          "Primary and fallback provider designation via UI controls",
+          "Settings persisted in updated llm-settings.json format"
+        ],
+        "feature_tags": ["llm", "settings", "frontend"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Alex: 'The settings UI needs a complete redesign'"],
+        "confidence": "high",
+        "source_citation": "Alex: 'Right now LLM settings are a single entry in llm-settings.json — one provider, one model, one API key. For multi-provider, we need settings for every provider simultaneously — four API keys, four model selections, primary/fallback designation. The settings UI needs a complete redesign.'"
+      },
+      {
+        "title": "Create mock LLM provider for test suite",
+        "type": "task",
+        "description": "Implement a MockProvider that implements the LLMProvider interface and returns deterministic results for unit and integration testing without hitting real APIs.",
+        "acceptance_criteria": [
+          "MockProvider implements the full LLMProvider interface",
+          "Returns configurable deterministic results",
+          "No external API calls made during test execution",
+          "Test fixtures provided for common evaluation scenarios"
+        ],
+        "feature_tags": ["llm", "testing", "quality"],
+        "epic_assignment": "proposed: Multi-LLM Provider Support",
+        "priority_signals": ["Mike: 'Add a story for a mock provider implementation'"],
+        "confidence": "high",
+        "source_citation": "Mike: 'Add a story for a mock provider implementation that the test suite can use. It should implement the same LLMProvider interface but return deterministic results.'"
+      }
+    ],
+    "checks": [
+      {
+        "story_title": "Build LLM provider abstraction layer with common interface",
+        "check_type": "new_epic",
+        "details": "The existing ERIS-004 (LLM Integration) epic covers basic provider selection and current Claude/OpenAI work, but the scope described in this meeting — abstraction layer, multi-provider platform, automatic failover, capability metadata — goes significantly beyond ERIS-004. Sarah explicitly acknowledged: 'what you're describing... feels like it's beyond what ERIS-004 was scoped for.' Mike confirmed: 'ERIS-004 is about \"the LLM integration works.\" What we're talking about is a strategic multi-provider platform.' New epic 'Multi-LLM Provider Support' should be created.",
+        "proposed_resolution": "Create new epic 'Multi-LLM Provider Support' to contain all 9 stories from this meeting. Keep ERIS-004 for the existing basic integration work. Move ERIS-044 (Gemini integration) from ERIS-004 to the new epic with updated dependencies.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Build LLM provider abstraction layer with common interface",
+        "check_type": "dependency",
+        "details": "The abstraction layer is a blocking dependency for ALL other stories in this meeting. Implementation order: Phase 1 — Abstraction layer (3 days). Phase 2 — Claude migration + OpenAI migration in parallel (2 days each). Phase 3 — Gemini + Azure OpenAI in parallel (4 days + 2 days). Failover and capability metadata depend on the abstraction layer. Configuration UI depends on multi-provider support being in place.",
+        "proposed_resolution": "Set up the following dependency chain: Abstraction Layer -> [Claude Migration, OpenAI Migration] -> [Gemini Integration, Azure OpenAI Integration]. Failover depends on at least two providers. Configuration UI depends on all providers.",
+        "routed_to": "Dev Lead"
+      },
+      {
+        "story_title": "Migrate Claude integration to new provider abstraction",
+        "check_type": "dependency",
+        "details": "Claude and OpenAI migrations can proceed in parallel once the abstraction layer is complete, but both must be complete before Gemini or Azure OpenAI work begins (to validate the interface contract).",
+        "proposed_resolution": "Schedule Claude and OpenAI migration stories in the same sprint, after the abstraction layer story is done.",
+        "routed_to": "Dev Lead"
+      },
+      {
+        "story_title": "Add Google Gemini as a new LLM provider",
+        "check_type": "overlap",
+        "details": "ERIS-044 in the backlog ('Add Gemini as a third LLM provider option') covers adding Gemini. Sarah explicitly noted: 'ERIS-044 is \"Add Gemini as a third LLM provider option\" — that would fold into this new epic.' The existing item should be moved to the new epic and its dependencies updated.",
+        "proposed_resolution": "Move ERIS-044 to the new 'Multi-LLM Provider Support' epic. Update its dependencies to require the abstraction layer story. Adjust scope to align with the GeminiProvider implementation approach.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Implement automatic failover from primary to secondary provider",
+        "check_type": "dependency",
+        "details": "Automatic failover requires at least two providers to be configured and ready simultaneously. This means the failover story cannot be tested until at least the Claude and OpenAI migrations are complete under the new abstraction layer.",
+        "proposed_resolution": "Schedule failover story after Phase 2 (Claude + OpenAI migration) is complete. Both the primary and fallback providers must be functional for testing.",
+        "routed_to": "Dev Lead"
+      }
+    ],
+    "backlog_hygiene": [],
+    "meeting_quality": {
+      "total_requirements": 9,
+      "ambiguous_count": 0,
+      "actionability_score": "high"
+    }
+  }
+}

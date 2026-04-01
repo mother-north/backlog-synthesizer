@@ -1,0 +1,20 @@
+{
+  "scenario_id": 5,
+  "description": "Empty/canceled meeting with no actionable content. Tests the system's handling of near-empty transcripts — should produce zero candidate stories and a meeting quality assessment reflecting no extractable requirements.",
+  "inputs": {
+    "meeting": "data/meeting_notes/11_empty.md",
+    "architecture": "data/architecture/eris_architecture.md",
+    "backlog": "data/backlog/backlog_items.json"
+  },
+  "use_cases_tested": ["EC-1"],
+  "expected_output": {
+    "candidate_stories": [],
+    "checks": [],
+    "backlog_hygiene": [],
+    "meeting_quality": {
+      "total_requirements": 0,
+      "ambiguous_count": 0,
+      "actionability_score": "low"
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "scenario_id": 1,
+  "description": "Clean kickoff meeting with clear scope decisions, NFRs, and explicit feature areas. Tests baseline story extraction, epic mapping to existing epics, and NFR identification.",
+  "inputs": {
+    "meeting": "data/meeting_notes/01_kickoff.md",
+    "architecture": "data/architecture/eris_architecture.md",
+    "backlog": "data/backlog/backlog_items.json"
+  },
+  "use_cases_tested": ["UC-1", "UC-14"],
+  "expected_output": {
+    "candidate_stories": [
+      {
+        "title": "Support PDF, DOCX, PPTX, XLSX, and plain text document processing",
+        "type": "feature",
+        "description": "Implement document processing pipeline supporting five file formats: PDF, DOCX, PPTX, XLSX, and plain text. This is a core v1 requirement for the text extraction pipeline feeding into risk assessment.",
+        "acceptance_criteria": [
+          "PDF files are parsed and text content extracted",
+          "DOCX, PPTX, and XLSX files are parsed using appropriate libraries",
+          "Plain text files are accepted without conversion",
+          "Unsupported file types return a clear error message"
+        ],
+        "feature_tags": ["document-processing", "file-handling"],
+        "epic_assignment": "ERIS-005 (existing)",
+        "priority_signals": ["Alex: 'The file extraction pipeline is a big chunk of work on its own'", "Listed as one of five core v1 feature areas"],
+        "confidence": "high",
+        "source_citation": "Alex: 'I'd add document processing to that list explicitly — we need to support PDF, DOCX, PPTX, XLSX, and plain text. The file extraction pipeline is a big chunk of work on its own.'"
+      },
+      {
+        "title": "Implement five user roles with configurable permissions",
+        "type": "feature",
+        "description": "Implement role-based access control with five roles: Administrator, Master Analyst, Analyst, Export Control, and User. Permissions are configurable through a JSON file.",
+        "acceptance_criteria": [
+          "Five roles are defined: Administrator, Master Analyst, Analyst, Export Control, User",
+          "Each role has distinct permissions configurable via JSON",
+          "Password hashing uses bcrypt",
+          "File-based sessions with express-session are implemented"
+        ],
+        "feature_tags": ["auth", "user-management", "rbac"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Listed as one of five core v1 feature areas", "Explicit role list decided in meeting"],
+        "confidence": "high",
+        "source_citation": "Alex: 'For auth, we'll use bcrypt for password hashing, file-based sessions with express-session, and we're planning five user roles — Administrator, Master Analyst, Analyst, Export Control, and a basic User role. Each role gets different permissions configurable through a JSON file.'"
+      },
+      {
+        "title": "Implement review queue audit trail from day one",
+        "type": "feature",
+        "description": "Log every review queue action (submit, claim, approve, decline, release) with the user identity and timestamp. This is a compliance requirement that should not be deferred.",
+        "acceptance_criteria": [
+          "Every review action is logged with action type, user, and timestamp",
+          "Audit log is queryable by action type and user",
+          "Audit trail cannot be modified or deleted by non-admin users",
+          "Audit entries include: submit, claim, approve, decline, release"
+        ],
+        "feature_tags": ["review-queue", "audit", "compliance"],
+        "epic_assignment": "ERIS-002 (existing)",
+        "priority_signals": ["Alex: 'That's a compliance requirement we shouldn't defer'", "Sarah confirmed: 'The review audit trail is in scope for v1'"],
+        "confidence": "high",
+        "source_citation": "Alex: 'we should plan for the review queue to have an audit trail from day one. Every action — submit, claim, approve, decline, release — gets logged with who did it and when. That's a compliance requirement we shouldn't defer.'"
+      },
+      {
+        "title": "Integrate Anthropic Claude and OpenAI as LLM providers",
+        "type": "feature",
+        "description": "Support Anthropic Claude and OpenAI as LLM providers for v1, with Gemini and Azure OpenAI as stretch goals.",
+        "acceptance_criteria": [
+          "Claude is available as an LLM provider option",
+          "OpenAI is available as an LLM provider option",
+          "Users can switch between providers in settings",
+          "Both providers produce consistent output format for risk assessment"
+        ],
+        "feature_tags": ["llm", "integration"],
+        "epic_assignment": "ERIS-004 (existing)",
+        "priority_signals": ["Decision 6 in meeting summary"],
+        "confidence": "high",
+        "source_citation": "Sarah: 'Decision 6: LLM provider support in v1 will include Anthropic Claude and OpenAI. Gemini and Azure OpenAI are stretch goals.'"
+      },
+      {
+        "title": "Handle image-only PDFs gracefully without OCR",
+        "type": "feature",
+        "description": "When an image-only PDF is uploaded and no text can be extracted, return a meaningful error rather than proceeding with empty input. OCR is out of scope for v1.",
+        "acceptance_criteria": [
+          "Image-only PDFs are detected when text extraction returns empty",
+          "A clear error message is returned to the user",
+          "The system does not attempt LLM evaluation on empty content",
+          "OCR is not included in v1 scope"
+        ],
+        "feature_tags": ["document-processing", "edge-case"],
+        "epic_assignment": "ERIS-005 (existing)",
+        "priority_signals": ["Mike identified this as an explicit scope boundary"],
+        "confidence": "high",
+        "source_citation": "Mike: 'One more: OCR for image-only PDFs. We'll handle the case gracefully — if there's no extractable text, we return a meaningful error — but we're not integrating an OCR library in v1.'"
+      },
+      {
+        "title": "Add loading indicator for LLM evaluation calls",
+        "type": "improvement",
+        "description": "Add a frontend loading indicator during LLM evaluation calls so users know the system is working, since evaluations take 5-30 seconds.",
+        "acceptance_criteria": [
+          "Loading spinner or progress indicator appears when evaluation starts",
+          "Indicator remains visible until evaluation result is returned",
+          "User is informed that AI evaluation may take 5-30 seconds"
+        ],
+        "feature_tags": ["frontend", "ux", "llm"],
+        "epic_assignment": "ERIS-004 (existing)",
+        "priority_signals": ["Mike suggested it in context of response time discussion"],
+        "confidence": "medium",
+        "source_citation": "Mike: 'And we should add a loading indicator on the frontend for evaluation calls so users know the system is working.'"
+      },
+      {
+        "title": "Target 30 concurrent users for initial release",
+        "type": "nfr",
+        "description": "The initial release must support 30 concurrent users with the current single-server SQLite architecture. The 500 concurrent user target is deferred as a future NFR requiring architecture changes.",
+        "acceptance_criteria": [
+          "System performs acceptably under 30 concurrent user sessions",
+          "Load test validates 30 concurrent users without degradation",
+          "Architectural constraints for the 30-user ceiling are documented",
+          "Scaling plan for 500 users documented as future work"
+        ],
+        "feature_tags": ["performance", "scalability", "nfr"],
+        "epic_assignment": "ERIS-007 (existing)",
+        "priority_signals": ["Sarah: 'initial release targets 30 concurrent users'", "Stakeholder requirement for 500 was deferred"],
+        "confidence": "high",
+        "source_citation": "Sarah: 'For now, let's document it this way: target 500 concurrent users as a future NFR, but the initial release targets 30 concurrent users with the current architecture. We'll revisit scaling when usage data tells us we need to.'"
+      },
+      {
+        "title": "API response time under 2 seconds for non-LLM endpoints",
+        "type": "nfr",
+        "description": "All non-LLM API endpoints (review queue, filtering, user management) must respond within 2 seconds. This is a hard requirement from stakeholders.",
+        "acceptance_criteria": [
+          "All non-LLM API endpoints respond within 2 seconds under normal load",
+          "Response time monitoring is in place for key endpoints",
+          "Endpoints exceeding 2 seconds are flagged for optimization",
+          "LLM evaluation endpoints are excluded from this requirement"
+        ],
+        "feature_tags": ["performance", "nfr", "api"],
+        "epic_assignment": "ERIS-007 (existing)",
+        "priority_signals": ["Sarah: 'Let's make that a hard requirement'"],
+        "confidence": "high",
+        "source_citation": "Sarah: 'Let's make that a hard requirement: API response time under 2 seconds for all non-LLM endpoints.'"
+      }
+    ],
+    "checks": [],
+    "backlog_hygiene": [],
+    "meeting_quality": {
+      "total_requirements": 8,
+      "ambiguous_count": 0,
+      "actionability_score": "high"
+    }
+  }
+}

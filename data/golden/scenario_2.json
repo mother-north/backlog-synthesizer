@@ -1,0 +1,137 @@
+{
+  "scenario_id": 2,
+  "description": "Risk scoring algorithm review meeting with mixed bugs and features. Tests type classification, duplicate detection (NaN bug overlaps ERIS-012), and architecture constraint detection (SQLite single-writer limitation).",
+  "inputs": {
+    "meeting": "data/meeting_notes/02_risk_scoring.md",
+    "architecture": "data/architecture/eris_architecture.md",
+    "backlog": "data/backlog/backlog_items.json"
+  },
+  "use_cases_tested": ["UC-2", "UC-8", "UC-9"],
+  "expected_output": {
+    "candidate_stories": [
+      {
+        "title": "Fix NaN display for empty documents and image-only PDFs",
+        "type": "bug",
+        "description": "When an empty document or image-only PDF is submitted, the risk score displays as NaN. The system should short-circuit before calling the LLM, return a score of 0 with category Minimal, and display a clear message.",
+        "acceptance_criteria": [
+          "Empty text input returns score 0, category Minimal, with 'no text content' message",
+          "Image-only PDFs without OCR return the same graceful response",
+          "LLM API is not called when document text is empty",
+          "NaN is never displayed to the user in any scenario"
+        ],
+        "feature_tags": ["risk-engine", "bug", "edge-case"],
+        "epic_assignment": "ERIS-001 (existing)",
+        "priority_signals": ["Mike: 'That's a bug we need to fix'", "Jordan confirmed it is already logged as ERIS-012"],
+        "confidence": "high",
+        "source_citation": "Jordan: 'If you submit an empty document — literally an empty text field — the risk score comes back as NaN. The UI just shows \"NaN%\" which is obviously not great.'"
+      },
+      {
+        "title": "Define explicit threshold boundary rules (lower-inclusive, upper-exclusive)",
+        "type": "feature",
+        "description": "Formalize the risk score threshold boundary behavior: lower bound inclusive, upper bound exclusive for each range. Document this in the code and configuration schema.",
+        "acceptance_criteria": [
+          "Threshold boundaries are lower-inclusive, upper-exclusive (e.g., 40 is Low, 41 is Medium)",
+          "Boundary behavior is documented in the configuration schema",
+          "Code comments clarify the comparison operators used",
+          "Boundary edge cases are covered by automated tests"
+        ],
+        "feature_tags": ["risk-engine", "scoring"],
+        "epic_assignment": "ERIS-001 (existing)",
+        "priority_signals": ["Mike made explicit decision in meeting"],
+        "confidence": "high",
+        "source_citation": "Mike: 'Let's make it explicit: the lower bound is inclusive, the upper bound is exclusive for each range. So Minimal is 0 to 20 inclusive, Low is 21 to 40 inclusive, and so on. Document that in the code and in the configuration schema.'"
+      },
+      {
+        "title": "Add server-side validation to clamp risk scores to 0-100",
+        "type": "feature",
+        "description": "Add server-side validation to ensure risk scores returned by the LLM are always within the 0-100 range. If the LLM returns a score outside this range, clamp it. If it returns a non-numeric score, flag it as an error.",
+        "acceptance_criteria": [
+          "Scores below 0 are clamped to 0",
+          "Scores above 100 are clamped to 100",
+          "Non-numeric scores are flagged as errors with a user-visible message",
+          "Clamping events are logged for monitoring"
+        ],
+        "feature_tags": ["risk-engine", "validation", "backend"],
+        "epic_assignment": "ERIS-001 (existing)",
+        "priority_signals": ["Part of Decision 4 in meeting summary"],
+        "confidence": "high",
+        "source_citation": "Alex: 'We should also add validation on the server side. If the LLM returns a score outside 0-100, we clamp it. If it returns a non-numeric score, we flag it as an error rather than displaying NaN.'"
+      },
+      {
+        "title": "Add metadata fields to risk-category-rules.json for audit",
+        "type": "improvement",
+        "description": "Add last-modified-by and last-modified-at fields to the risk-category-rules.json file to track who changed thresholds and when. This is a lightweight alternative to migrating thresholds to the database.",
+        "acceptance_criteria": [
+          "risk-category-rules.json includes last-modified-by and last-modified-at fields",
+          "Fields are updated automatically on every threshold save",
+          "Existing threshold data is preserved during the format migration"
+        ],
+        "feature_tags": ["risk-engine", "settings", "audit"],
+        "epic_assignment": "ERIS-001 (existing)",
+        "priority_signals": ["Decision 3: thresholds stay in JSON with added metadata"],
+        "confidence": "high",
+        "source_citation": "Mike: 'Let's keep it in JSON for now and add that metadata. We can revisit the database migration if we get requirements for a full audit trail on configuration changes. Decision: thresholds stay in risk-category-rules.json with added last-modified-by and last-modified-at fields.'"
+      },
+      {
+        "title": "Add threshold validation to prevent overlapping or gapped ranges",
+        "type": "feature",
+        "description": "Validate threshold configurations on save to ensure no overlapping ranges, no gaps, and full coverage of the 0-100 spectrum.",
+        "acceptance_criteria": [
+          "Saving overlapping threshold ranges returns a validation error",
+          "Saving thresholds with gaps returns a validation error",
+          "Thresholds must cover the full 0-100 spectrum",
+          "Validation runs on the settings save endpoint before persisting"
+        ],
+        "feature_tags": ["risk-engine", "settings", "validation"],
+        "epic_assignment": "ERIS-001 (existing)",
+        "priority_signals": ["Alex committed to adding this to acceptance criteria for settings endpoint"],
+        "confidence": "high",
+        "source_citation": "Alex: 'We need validation on the threshold save endpoint. No overlapping ranges, no gaps, must cover the full 0-100 spectrum. I'll add that to the acceptance criteria for the settings endpoint.'"
+      },
+      {
+        "title": "Document cross-provider score variation as known limitation",
+        "type": "task",
+        "description": "Document that different LLM providers may return different risk scores for the same document and that this is expected behavior, not a bug. Organizations switching providers should recalibrate thresholds.",
+        "acceptance_criteria": [
+          "Known limitation documented in system documentation",
+          "Documentation advises threshold recalibration when switching providers",
+          "No score normalization is implemented across providers"
+        ],
+        "feature_tags": ["llm", "documentation", "risk-engine"],
+        "epic_assignment": "ERIS-004 (existing)",
+        "priority_signals": ["Decision 5 in meeting summary"],
+        "confidence": "high",
+        "source_citation": "Mike: 'We're not going to normalize scores across providers. If an organization switches providers, they should recalibrate their thresholds.' Alex: 'OK. I'll document that as a known limitation.'"
+      }
+    ],
+    "checks": [
+      {
+        "story_title": "Fix NaN display for empty documents and image-only PDFs",
+        "check_type": "overlap",
+        "details": "This bug is already tracked as ERIS-012 ('Risk score shows NaN for empty documents') in the backlog with status 'in_progress'. The meeting discussion describes the same issue and its root cause (parseInt on null LLM response).",
+        "proposed_resolution": "Merge this meeting's additional context (short-circuit before LLM call, score 0 with Minimal category, cover image-only PDFs) into ERIS-012's acceptance criteria rather than creating a duplicate item.",
+        "routed_to": "Dev Lead"
+      },
+      {
+        "story_title": "Add metadata fields to risk-category-rules.json for audit",
+        "check_type": "architecture",
+        "details": "Meeting discussed migrating thresholds from JSON to SQLite (ERIS-013) but decided against it due to SQLite single-writer constraint. The architecture document confirms: 'SQLite supports only one concurrent write transaction' and 'Concurrent writes to the same JSON file can cause data loss (last-write-wins with no locking)'. The decision to keep JSON avoids the SQLite write contention but does not solve the JSON concurrent write risk.",
+        "proposed_resolution": "Keep thresholds in JSON as decided, but flag the concurrent JSON write risk from the architecture constraints. Consider adding file locking for the JSON write operation.",
+        "routed_to": "Architect"
+      },
+      {
+        "story_title": "Add metadata fields to risk-category-rules.json for audit",
+        "check_type": "dependency",
+        "details": "This story's decision to keep thresholds in JSON effectively deprioritizes ERIS-013 ('Refactor risk category rules configuration to use database'), which proposes the opposite approach. ERIS-013 should be updated to reflect that database migration is deferred pending audit trail requirements.",
+        "proposed_resolution": "Update ERIS-013 status and description to note that the team decided to defer database migration in the risk scoring review meeting. Keep it in backlog as a future option.",
+        "routed_to": "PM"
+      }
+    ],
+    "backlog_hygiene": [],
+    "meeting_quality": {
+      "total_requirements": 6,
+      "ambiguous_count": 0,
+      "actionability_score": "high"
+    }
+  }
+}

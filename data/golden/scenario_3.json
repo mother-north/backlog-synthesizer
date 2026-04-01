@@ -1,0 +1,198 @@
+{
+  "scenario_id": 3,
+  "description": "User roles and access control meeting with ambiguous requirements, internal contradictions (3 vs 4 vs 5 roles), and conflict with Meeting 1 kickoff decisions on role structure. Tests prior decision conflict detection, ambiguity flagging, and internal contradiction handling.",
+  "inputs": {
+    "meeting": "data/meeting_notes/05_user_roles.md",
+    "architecture": "data/architecture/eris_architecture.md",
+    "backlog": "data/backlog/backlog_items.json"
+  },
+  "use_cases_tested": ["UC-4", "UC-5", "EC-2"],
+  "expected_output": {
+    "candidate_stories": [
+      {
+        "title": "Restructure user roles from current five-role model",
+        "type": "feature",
+        "description": "Restructure the ERIS role model. Three competing proposals exist: (1) keep existing 5 roles, (2) Chris's alternative 5 roles (Administrator, Analyst, Reviewer, Viewer, Compliance Officer), (3) Mike's simplified 3-4 roles (Admin, Analyst, Reviewer, Viewer). No consensus was reached.",
+        "acceptance_criteria": [
+          "Role restructuring proposal is selected from the three options",
+          "Selected roles are implemented in access-permissions.json",
+          "Middleware role checks updated to reflect new role names",
+          "Migration path defined for existing users assigned to deprecated roles"
+        ],
+        "feature_tags": ["auth", "rbac", "user-management"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Chris: stakeholders confused by current roles", "Multiple proposals discussed, no resolution"],
+        "confidence": "low",
+        "source_citation": "Sarah: 'We have three proposals on the table: keep the existing five roles, Chris's alternative five roles, and Mike's three-to-four role simplification. We don't have consensus.'"
+      },
+      {
+        "title": "Collapse Master Analyst and Analyst into a single Analyst role",
+        "type": "feature",
+        "description": "Merge the Master Analyst and Analyst roles into a single Analyst role. Field feedback indicates the distinction is confusing and the permission differences are minimal in practice.",
+        "acceptance_criteria": [
+          "Master Analyst role is removed from role definitions",
+          "All Master Analyst users are migrated to Analyst role",
+          "Prompt management permissions are reviewed for the merged Analyst role",
+          "access-permissions.json is updated to reflect the merge"
+        ],
+        "feature_tags": ["auth", "rbac", "user-management"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Chris: 'they don't really understand when someone should be one versus the other'"],
+        "confidence": "low",
+        "source_citation": "Chris: 'they're confused by the distinction between Master Analyst and Analyst. Like, they don't really understand when someone should be one versus the other. And honestly, when I looked at the access-permissions.json, the actual difference in permissions is pretty subtle.'"
+      },
+      {
+        "title": "Add Viewer role with read-only access",
+        "type": "feature",
+        "description": "Add a Viewer role for users who need to see evaluation results but should not submit, evaluate, or review documents. Open question: whether Viewer needs review queue access.",
+        "acceptance_criteria": [
+          "Viewer role is added to role definitions",
+          "Viewer can view evaluation results",
+          "Viewer cannot submit, evaluate, or perform review actions",
+          "Review queue access for Viewer is determined (open question)"
+        ],
+        "feature_tags": ["auth", "rbac", "user-management"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Both Chris and Mike agree on need for a Viewer role"],
+        "confidence": "medium",
+        "source_citation": "Chris: 'we should collapse those into one Analyst role and add a Viewer role for people who just need to see results.' Mike later: 'Fine, then make it four roles. Admin, Analyst, Reviewer, Viewer.'"
+      },
+      {
+        "title": "Investigate capability-based access control as alternative to RBAC",
+        "type": "task",
+        "description": "Evaluate whether ERIS should move from role-based access control to capability-based (granular per-user permissions). Chris raised this as a potential need for scaling across teams.",
+        "acceptance_criteria": [
+          "Technical feasibility assessment completed for capability-based access",
+          "Impact on middleware, permissions model, and admin UI documented",
+          "Comparison with current RBAC approach provided",
+          "Recommendation delivered to PM for decision"
+        ],
+        "feature_tags": ["auth", "rbac", "architecture"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Chris: 'probably both' needed, but 'nice to have' for now"],
+        "confidence": "low",
+        "source_citation": "Chris: 'maybe permissions should be more granular, not just role-based. Where you can toggle individual capabilities per user.' Mike: 'That's a completely different architecture. Right now it's RBAC — role-based. You're talking about capability-based access control. That's a much bigger change.'"
+      },
+      {
+        "title": "Implement session invalidation for role migration",
+        "type": "feature",
+        "description": "When user roles are restructured, all existing file-based sessions must be invalidated to force re-login. Sessions have the role baked in, so stale sessions could reference roles that no longer exist.",
+        "acceptance_criteria": [
+          "Admin can trigger a bulk session invalidation",
+          "All session files are deleted on role migration",
+          "Users are redirected to login page on next request",
+          "Clear communication mechanism for users about forced re-login"
+        ],
+        "feature_tags": ["auth", "session", "migration"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Mike raised this as a technical requirement for any role change"],
+        "confidence": "medium",
+        "source_citation": "Mike: 'sessions are stored as files on disk. Each session file has the user's role baked in. If we change roles, we either need to invalidate all sessions or handle a case where a session has a role that doesn't exist anymore.' ... 'the simplest thing is to just force everyone to re-login after a role migration. Invalidate all session files.'"
+      },
+      {
+        "title": "Make roles configurable per deployment",
+        "type": "feature",
+        "description": "Allow the set of available roles to be configurable per deployment rather than hardcoded. Currently the middleware has some hardcoded role checks (e.g., role === 'Administrator'). Estimated two sprints of work.",
+        "acceptance_criteria": [
+          "Role definitions are fully driven by access-permissions.json with no hardcoded role names",
+          "Hardcoded admin checks in middleware are refactored to use configuration",
+          "New deployments can define custom role sets",
+          "Default role set is provided for fresh installations"
+        ],
+        "feature_tags": ["auth", "rbac", "configuration"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Chris raised as a need; Mike estimated two sprints"],
+        "confidence": "low",
+        "source_citation": "Chris: 'when a new deployment goes out, what's the default role set? We should probably make the roles configurable per deployment, not hardcoded.' Mike: 'the middleware has some role-specific logic — like, the admin check is hardcoded as role === \"Administrator\" in a few places. We'd need to clean that up. I'd estimate maybe two sprints of work to make roles fully configurable.'"
+      },
+      {
+        "title": "Conduct user role survey across deployment sites",
+        "type": "task",
+        "description": "Survey actual users across deployment sites to understand which roles they use and what role structure best matches their workflows. Data-driven input before making role restructuring decision.",
+        "acceptance_criteria": [
+          "Survey sent to all deployment sites",
+          "Results compiled with role usage statistics",
+          "Findings presented in the next role review meeting"
+        ],
+        "feature_tags": ["user-management", "research"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Explicit action item assigned to Chris"],
+        "confidence": "high",
+        "source_citation": "Chris: 'I think we need to survey the actual user base and see what roles they're using. Get data before we make a decision.'"
+      },
+      {
+        "title": "Technical impact assessment for role restructuring proposals",
+        "type": "task",
+        "description": "Document the technical migration impact for each of the three role restructuring proposals: keep current 5, Chris's alternative 5, Mike's simplified 3-4.",
+        "acceptance_criteria": [
+          "Impact assessment covers middleware, permissions config, user management UI, and session handling",
+          "Migration path documented for each proposal",
+          "Effort estimate provided for each proposal",
+          "Assessment delivered before next decision meeting"
+        ],
+        "feature_tags": ["user-management", "architecture", "planning"],
+        "epic_assignment": "ERIS-003 (existing)",
+        "priority_signals": ["Explicit action item assigned to Mike"],
+        "confidence": "high",
+        "source_citation": "Mike: 'And we need to document the migration impact for each proposal. I can put together a technical impact assessment.'"
+      }
+    ],
+    "checks": [
+      {
+        "story_title": "Restructure user roles from current five-role model",
+        "check_type": "prior_decision",
+        "details": "Meeting 1 (kickoff) explicitly decided on five roles: Administrator, Master Analyst, Analyst, Export Control, and User. Alex stated the plan and Sarah confirmed it as part of the v1 scope. Meeting 5 now proposes changing this structure with three competing proposals, directly contradicting the kickoff decision.",
+        "proposed_resolution": "Flag for PM decision. The kickoff established five roles as a deliberate choice modeled after the compliance department structure. Any change requires formal revision of the v1 scope decision. The user survey (action item) should inform the decision.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Restructure user roles from current five-role model",
+        "check_type": "ambiguity",
+        "details": "Three conflicting proposals with no consensus: (1) Keep existing 5 roles, (2) Chris's alternative 5 roles (Admin, Analyst, Reviewer, Viewer, Compliance Officer), (3) Mike's 3-4 roles (Admin, Analyst, Reviewer, optionally Viewer). The meeting ended without a decision. Open questions remain about role count, permission model, migration path, and Viewer access scope.",
+        "proposed_resolution": "Block implementation until the user survey and technical impact assessment are completed. Schedule a follow-up decision meeting. Do not build against any new role structure until consensus is reached, per Sarah's directive.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Restructure user roles from current five-role model",
+        "check_type": "ambiguity",
+        "details": "Internal contradiction within the meeting: Chris proposes 5 roles (different from current), Mike proposes 3 roles, then revises to 4 roles when challenged. The same meeting cannot agree on the fundamental question of how many roles the system needs. Sarah explicitly acknowledged: 'Three roles? That's a big departure from what we have. Chris just said five, you're saying three. We currently have five. These are three different proposals.'",
+        "proposed_resolution": "Treat the three proposals as competing options requiring PM decision. Document all three with pros/cons from the meeting discussion. The internal contradiction makes this story unimplementable without further clarification.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Collapse Master Analyst and Analyst into a single Analyst role",
+        "check_type": "prior_decision",
+        "details": "Meeting 1 (kickoff) explicitly decided on five roles including both Master Analyst and Analyst as distinct roles. ERIS-031 in the backlog ('Implement role-based access control with five user roles') is status 'done' and implements the five-role model. Collapsing these roles would require rework of a completed backlog item.",
+        "proposed_resolution": "Flag that ERIS-031 (done) would need to be reopened and revised. Coordinate with the user survey results before proceeding.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Add Viewer role with read-only access",
+        "check_type": "ambiguity",
+        "details": "Open question raised but not resolved: 'whether the Viewer role we keep talking about needs access to the review queue or just evaluation results.' This affects the permissions definition and cannot be implemented without clarification.",
+        "proposed_resolution": "Add to the open questions list for the follow-up meeting. Viewer role scope must be defined before implementation.",
+        "routed_to": "PM"
+      },
+      {
+        "story_title": "Investigate capability-based access control as alternative to RBAC",
+        "check_type": "architecture",
+        "details": "Moving from RBAC to capability-based access control would require redesigning the permissions model, middleware, and admin UI. The current architecture uses role-string checks in middleware with permissions defined in access-permissions.json. Mike described this as 'a completely different architecture' and 'a much bigger change.'",
+        "proposed_resolution": "Defer capability-based access to a future phase. Chris acknowledged it as 'nice to have' for scaling. Focus on resolving the role structure question first.",
+        "routed_to": "Architect"
+      },
+      {
+        "story_title": "Add Viewer role with read-only access",
+        "check_type": "overlap",
+        "details": "ERIS-083 in the backlog ('Add Viewer role with read-only access to evaluation results') already proposes adding a Viewer role with very similar scope. Status is 'backlog', priority 'low'.",
+        "proposed_resolution": "If the team decides to add a Viewer role, update ERIS-083's priority and acceptance criteria based on this meeting's discussion rather than creating a new item.",
+        "routed_to": "PM"
+      }
+    ],
+    "backlog_hygiene": [],
+    "meeting_quality": {
+      "total_requirements": 8,
+      "ambiguous_count": 5,
+      "actionability_score": "low"
+    }
+  }
+}

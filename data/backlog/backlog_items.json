@@ -1,0 +1,1179 @@
+[
+  {
+    "id": "ERIS-001",
+    "type": "epic",
+    "title": "Risk Assessment Engine",
+    "description": "Core risk assessment engine for evaluating documents against export control regulations. Includes risk scoring algorithm, configurable thresholds, risk category classification, and trigger paragraph extraction.",
+    "status": "in_progress",
+    "epic_id": null,
+    "priority": "critical",
+    "labels": ["risk-engine", "core"],
+    "acceptance_criteria": [
+      "Documents receive a risk score between 0-100%",
+      "Risk categories (Restricted, High, Medium, Low, Minimal) are assigned based on configurable thresholds",
+      "Trigger paragraphs are extracted and highlighted in results",
+      "Risk scoring works for all supported document types"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-002",
+    "type": "epic",
+    "title": "Review Queue",
+    "description": "Document review queue workflow enabling analysts to submit, claim, review, and disposition documents flagged for export control review.",
+    "status": "in_progress",
+    "epic_id": null,
+    "priority": "critical",
+    "labels": ["review-queue", "workflow"],
+    "acceptance_criteria": [
+      "Documents can be submitted to the review queue after evaluation",
+      "Reviewers can claim, approve, decline, or release documents",
+      "Complete audit trail of all review actions",
+      "Auto-retrieve mode for efficient batch review"
+    ],
+    "dependencies": ["ERIS-001"]
+  },
+  {
+    "id": "ERIS-003",
+    "type": "epic",
+    "title": "User Management & Auth",
+    "description": "Multi-user authentication system with role-based access control. Supports Administrator, Master Analyst, Analyst, Export Control, and User roles with configurable permissions.",
+    "status": "in_progress",
+    "epic_id": null,
+    "priority": "critical",
+    "labels": ["auth", "user-management", "security"],
+    "acceptance_criteria": [
+      "Secure login with bcrypt password hashing",
+      "Five distinct roles with configurable permissions",
+      "24-hour rolling sessions with multi-tab support",
+      "Admin can create, update, and delete users"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-004",
+    "type": "epic",
+    "title": "LLM Integration",
+    "description": "Integration layer for AI/LLM providers to power document risk assessment. Currently supports Anthropic Claude and OpenAI with model selection and connection testing.",
+    "status": "in_progress",
+    "epic_id": null,
+    "priority": "high",
+    "labels": ["llm", "ai", "integration"],
+    "acceptance_criteria": [
+      "Users can select between supported LLM providers",
+      "Model selection within each provider",
+      "Connection testing before evaluation",
+      "Graceful fallback on API errors"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-005",
+    "type": "epic",
+    "title": "Document Processing",
+    "description": "Document ingestion and text extraction pipeline supporting PDF, DOC, DOCX, TXT, PPTX, and XLSX/XLS formats. Includes batch processing with progress tracking.",
+    "status": "in_progress",
+    "epic_id": null,
+    "priority": "high",
+    "labels": ["document-processing", "file-handling"],
+    "acceptance_criteria": [
+      "Support for PDF, DOC, DOCX, TXT, PPTX, XLSX file types",
+      "Batch file upload with progress tracking",
+      "Duplicate file detection",
+      "Document preview with slide-by-slide rendering for presentations"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-006",
+    "type": "epic",
+    "title": "Regulation Library",
+    "description": "Management system for regulation documents used as reference material during export control assessments. Includes document upload, version control, and status tracking.",
+    "status": "backlog",
+    "epic_id": null,
+    "priority": "medium",
+    "labels": ["regulations", "reference-data"],
+    "acceptance_criteria": [
+      "CRUD operations for regulation documents",
+      "Version control with document history",
+      "Active/Inactive status management",
+      "Regulation content available to AI prompts during evaluation"
+    ],
+    "dependencies": ["ERIS-004"]
+  },
+  {
+    "id": "ERIS-007",
+    "type": "epic",
+    "title": "Deployment & DevOps",
+    "description": "Infrastructure, deployment automation, and operational tooling for ERIS. Covers PM2 configuration, deployment scripts, SSL setup, and multi-environment support.",
+    "status": "in_progress",
+    "epic_id": null,
+    "priority": "high",
+    "labels": ["devops", "infrastructure", "deployment"],
+    "acceptance_criteria": [
+      "Automated deployment via shell scripts",
+      "PM2 process management in production",
+      "SSL/HTTPS support with auto-renewal",
+      "Multi-environment support (DEV/QA/UAT)"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-010",
+    "type": "story",
+    "title": "Implement risk scoring algorithm with weighted category analysis",
+    "description": "Implement the core risk scoring algorithm that analyzes document content against export control criteria and produces a 0-100% risk score. The algorithm should weight different risk indicators based on configurable category rules.",
+    "status": "done",
+    "epic_id": "ERIS-001",
+    "priority": "critical",
+    "labels": ["risk-engine", "backend"],
+    "acceptance_criteria": [
+      "Risk score is calculated as a percentage between 0-100",
+      "Score considers multiple risk indicators with configurable weights",
+      "Algorithm handles edge cases: empty documents, very short text, non-English content",
+      "Scoring results are deterministic for the same input and model"
+    ],
+    "dependencies": ["ERIS-004"]
+  },
+  {
+    "id": "ERIS-011",
+    "type": "story",
+    "title": "Add configurable risk thresholds for category classification",
+    "description": "Allow administrators to configure the score thresholds that determine risk category boundaries (Restricted, High, Medium, Low, Minimal). Thresholds are stored in risk-category-rules.json and editable via the settings UI.",
+    "status": "done",
+    "epic_id": "ERIS-001",
+    "priority": "high",
+    "labels": ["risk-engine", "settings", "frontend"],
+    "acceptance_criteria": [
+      "Admin can view and edit risk threshold values in settings",
+      "Changes persist in risk-category-rules.json",
+      "Validation prevents overlapping or invalid threshold ranges",
+      "Changes take effect immediately for new evaluations"
+    ],
+    "dependencies": ["ERIS-010"]
+  },
+  {
+    "id": "ERIS-012",
+    "type": "bug",
+    "title": "Risk score shows NaN for empty documents",
+    "description": "When a user submits an empty document or a document with no extractable text (e.g., image-only PDF without OCR), the risk score displays as NaN instead of handling the edge case gracefully.",
+    "status": "in_progress",
+    "epic_id": "ERIS-001",
+    "priority": "high",
+    "labels": ["risk-engine", "bug", "edge-case"],
+    "acceptance_criteria": [
+      "Empty documents return a score of 0 with a 'no content' warning",
+      "Image-only PDFs display a message indicating no text was extracted",
+      "NaN is never displayed to the user"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-013",
+    "type": "task",
+    "title": "Refactor risk category rules configuration to use database",
+    "description": "Move risk category rules from the JSON file (risk-category-rules.json) to the SQLite database for better consistency and to support future multi-tenancy requirements.",
+    "status": "backlog",
+    "epic_id": "ERIS-001",
+    "priority": "low",
+    "labels": ["risk-engine", "tech-debt", "database"],
+    "acceptance_criteria": [
+      "Risk rules stored in SQLite table with migration script",
+      "API endpoints updated to read/write from database",
+      "Backward compatibility with existing JSON config during migration",
+      "Rollback procedure documented"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-014",
+    "type": "story",
+    "title": "Add risk score trend analysis for repeat documents",
+    "description": "Track risk score changes over time when the same document is re-evaluated. Display a trend indicator showing whether risk increased, decreased, or remained stable across evaluations.",
+    "status": "backlog",
+    "epic_id": "ERIS-001",
+    "priority": "medium",
+    "labels": ["risk-engine", "analytics", "frontend"],
+    "acceptance_criteria": [
+      "System identifies previously evaluated documents by hash",
+      "Score history is stored and retrievable",
+      "UI shows trend arrow (up/down/stable) next to current score",
+      "Trend data is available in assessment log export"
+    ],
+    "dependencies": ["ERIS-010"]
+  },
+  {
+    "id": "ERIS-015",
+    "type": "bug",
+    "title": "Risk category label misaligned on mobile viewport",
+    "description": null,
+    "status": "backlog",
+    "epic_id": "ERIS-001",
+    "priority": "low",
+    "labels": ["frontend", "bug", "ui"],
+    "acceptance_criteria": [
+      "Risk category badge is properly aligned on screens < 768px",
+      "No text overflow or truncation on category labels"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-020",
+    "type": "story",
+    "title": "Implement document submission to review queue",
+    "description": "Allow users to submit evaluated documents to the review queue for analyst review. The submission should capture the document content, evaluation results, and submitter information.",
+    "status": "done",
+    "epic_id": "ERIS-002",
+    "priority": "critical",
+    "labels": ["review-queue", "backend"],
+    "acceptance_criteria": [
+      "Submit button appears after evaluation completes",
+      "Submission captures document, risk score, and evaluation metadata",
+      "Submitted documents appear in the review queue with 'pending' status",
+      "Duplicate submission prevention for the same document"
+    ],
+    "dependencies": ["ERIS-001"]
+  },
+  {
+    "id": "ERIS-021",
+    "type": "story",
+    "title": "Implement claim-based document assignment for reviewers",
+    "description": "Reviewers can claim documents from the queue to prevent double-review. A claimed document is locked to the claiming reviewer until they approve, decline, or release it.",
+    "status": "done",
+    "epic_id": "ERIS-002",
+    "priority": "high",
+    "labels": ["review-queue", "backend", "workflow"],
+    "acceptance_criteria": [
+      "Reviewer can claim an unclaimed document",
+      "Claimed documents show the reviewer's name and claim timestamp",
+      "Other reviewers cannot claim an already-claimed document",
+      "Reviewer can release a document back to the queue"
+    ],
+    "dependencies": ["ERIS-020"]
+  },
+  {
+    "id": "ERIS-022",
+    "type": "story",
+    "title": "Add review queue filtering and sorting",
+    "description": "Enable reviewers to filter the review queue by status, risk category, date range, and submitter. Add sorting by priority, date submitted, and risk score.",
+    "status": "in_progress",
+    "epic_id": "ERIS-002",
+    "priority": "medium",
+    "labels": ["review-queue", "frontend", "ux"],
+    "acceptance_criteria": [
+      "Filter by status: pending, under_review, approved, declined",
+      "Filter by risk category",
+      "Sort by date submitted, risk score, or priority",
+      "Filters persist across page navigation"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-023",
+    "type": "bug",
+    "title": "Review queue count badge shows stale data after action",
+    "description": "After approving or declining a document, the review queue count badge in the sidebar does not update until the page is manually refreshed. The badge should reflect the current count in real-time.",
+    "status": "in_progress",
+    "epic_id": "ERIS-002",
+    "priority": "medium",
+    "labels": ["review-queue", "frontend", "bug"],
+    "acceptance_criteria": [
+      "Badge updates immediately after approve/decline/release actions",
+      "Badge count matches actual pending document count"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-024",
+    "type": "story",
+    "title": "Add auto-retrieve mode for sequential document review",
+    "description": "Implement auto-retrieve functionality that automatically fetches the next document in the queue after a reviewer completes an action (approve/decline). This speeds up batch review sessions.",
+    "status": "done",
+    "epic_id": "ERIS-002",
+    "priority": "medium",
+    "labels": ["review-queue", "workflow", "ux"],
+    "acceptance_criteria": [
+      "Toggle switch to enable/disable auto-retrieve",
+      "Next document loads automatically after approve or decline",
+      "If queue is empty, display appropriate message",
+      "Auto-retrieve preference persists in user session"
+    ],
+    "dependencies": ["ERIS-021"]
+  },
+  {
+    "id": "ERIS-025",
+    "type": "improvement",
+    "title": "Add review queue dashboard with summary statistics",
+    "description": "Create a dashboard view for the review queue showing aggregate statistics: total pending, approved today, declined today, average review time, and distribution by risk category.",
+    "status": "backlog",
+    "epic_id": "ERIS-002",
+    "priority": "low",
+    "labels": ["review-queue", "analytics", "frontend"],
+    "acceptance_criteria": null,
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-030",
+    "type": "story",
+    "title": "Implement user login with bcrypt password hashing",
+    "description": "Implement secure user authentication using bcrypt for password hashing. Users authenticate with username and password, receiving a session cookie on success.",
+    "status": "done",
+    "epic_id": "ERIS-003",
+    "priority": "critical",
+    "labels": ["auth", "security", "backend"],
+    "acceptance_criteria": [
+      "Passwords are hashed with bcrypt (10 salt rounds)",
+      "Login returns session cookie on success",
+      "Failed login returns generic error (no username enumeration)",
+      "Account lockout after 5 consecutive failed attempts"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-031",
+    "type": "story",
+    "title": "Implement role-based access control with five user roles",
+    "description": "Define and enforce five user roles: Administrator, Master Analyst, Analyst, Export Control, and User. Each role has specific permissions configured in access-permissions.json. The Administrator role has full access, while other roles have progressively restricted permissions.",
+    "status": "done",
+    "epic_id": "ERIS-003",
+    "priority": "critical",
+    "labels": ["auth", "security", "rbac"],
+    "acceptance_criteria": [
+      "Five roles defined: Administrator, Master Analyst, Analyst, Export Control, User",
+      "Permissions configurable via access-permissions.json",
+      "Middleware enforces role checks on all protected endpoints",
+      "Role changes take effect on next login"
+    ],
+    "dependencies": ["ERIS-030"]
+  },
+  {
+    "id": "ERIS-032",
+    "type": "story",
+    "title": "Implement user CRUD operations for admin panel",
+    "description": "",
+    "status": "done",
+    "epic_id": "ERIS-003",
+    "priority": "high",
+    "labels": ["user-management", "admin", "backend"],
+    "acceptance_criteria": [
+      "Admin can create users with username, password, and role",
+      "Admin can update user details and role",
+      "Admin can delete users (except own account)",
+      "User list displays all users with role and last login"
+    ],
+    "dependencies": ["ERIS-031"]
+  },
+  {
+    "id": "ERIS-033",
+    "type": "bug",
+    "title": "Session cookie not cleared properly on logout in Safari",
+    "description": "On Safari browsers, the session cookie persists after logout, allowing the user to access protected pages briefly before the server rejects the invalid session. The cookie path may not match the BASE_PATH configuration.",
+    "status": "backlog",
+    "epic_id": "ERIS-003",
+    "priority": "medium",
+    "labels": ["auth", "bug", "browser-compat"],
+    "acceptance_criteria": [
+      "Session cookie is properly cleared on all major browsers",
+      "Cookie path matches BASE_PATH configuration",
+      "No authenticated pages accessible after logout"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-034",
+    "type": "story",
+    "title": "Add password complexity requirements and expiration policy",
+    "description": "Enforce password complexity rules (minimum length, uppercase, number, special character) and implement a 90-day password expiration policy with advance warning notifications.",
+    "status": "backlog",
+    "epic_id": "ERIS-003",
+    "priority": "medium",
+    "labels": ["auth", "security", "compliance"],
+    "acceptance_criteria": [
+      "Passwords must be at least 12 characters with mixed case, number, and special character",
+      "Expired passwords force a change on next login",
+      "Warning shown 14 days before expiration",
+      "Last 5 passwords cannot be reused"
+    ],
+    "dependencies": ["ERIS-030"]
+  },
+  {
+    "id": "ERIS-035",
+    "type": "bug",
+    "title": "Admin can delete their own account causing system lockout",
+    "description": null,
+    "status": "backlog",
+    "epic_id": "ERIS-003",
+    "priority": "high",
+    "labels": ["user-management", "bug", "security"],
+    "acceptance_criteria": [
+      "API prevents deletion of the currently logged-in admin user",
+      "UI disables delete button for own account",
+      "System always has at least one administrator"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-040",
+    "type": "story",
+    "title": "Implement LLM provider selection and model configuration",
+    "description": "Allow users to select between Anthropic Claude and OpenAI as their LLM provider, choose specific models within each provider, and test the connection before running evaluations.",
+    "status": "done",
+    "epic_id": "ERIS-004",
+    "priority": "high",
+    "labels": ["llm", "settings", "backend"],
+    "acceptance_criteria": [
+      "Provider dropdown with Anthropic and OpenAI options",
+      "Model list updates based on selected provider",
+      "Connection test validates API key and model access",
+      "Selected configuration persists in llm-settings.json"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-041",
+    "type": "story",
+    "title": "Implement custom prompt management per user",
+    "description": "Each user can customize the AI prompt used for their evaluations. The prompt is stored per-user and falls back to the global prompt if not customized.",
+    "status": "done",
+    "epic_id": "ERIS-004",
+    "priority": "medium",
+    "labels": ["llm", "prompts", "backend"],
+    "acceptance_criteria": [
+      "Users can view, edit, and save their personal prompt",
+      "Default prompt falls back to global prompt",
+      "Admin can push global prompt to overwrite all user prompts",
+      "Prompt changes take effect on next evaluation"
+    ],
+    "dependencies": ["ERIS-040"]
+  },
+  {
+    "id": "ERIS-042",
+    "type": "bug",
+    "title": "LLM connection test succeeds but evaluation fails with timeout",
+    "description": "The connection test endpoint uses a simple ping that succeeds even when the API key has insufficient quota. Actual evaluation requests then fail with a 429 or timeout error, confusing users who believe their connection is working.",
+    "status": "in_progress",
+    "epic_id": "ERIS-004",
+    "priority": "high",
+    "labels": ["llm", "bug", "reliability"],
+    "acceptance_criteria": [
+      "Connection test sends a minimal evaluation request, not just an auth check",
+      "Test validates quota availability",
+      "Clear error message distinguishes auth failure from quota exhaustion"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-043",
+    "type": "task",
+    "title": "Add retry logic with exponential backoff for LLM API calls",
+    "description": "Implement automatic retry with exponential backoff for transient LLM API errors (rate limits, server errors). Non-retryable errors like auth failures should fail immediately.",
+    "status": "done",
+    "epic_id": "ERIS-004",
+    "priority": "medium",
+    "labels": ["llm", "reliability", "backend"],
+    "acceptance_criteria": [
+      "Retry up to 3 times with exponential backoff",
+      "Retry only on transient errors (429, 500, 503)",
+      "Do not retry on auth failures (401, 403)",
+      "Log each retry attempt for debugging"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-044",
+    "type": "story",
+    "title": "Add Gemini as a third LLM provider option",
+    "description": "Extend the LLM integration to support Google Gemini models alongside Claude and OpenAI. This includes API integration, model selection, and connection testing for Gemini.",
+    "status": "backlog",
+    "epic_id": "ERIS-004",
+    "priority": "medium",
+    "labels": ["llm", "integration", "gemini"],
+    "acceptance_criteria": [
+      "Gemini appears as a provider option in LLM settings",
+      "Support for Gemini Pro and Gemini Ultra models",
+      "Connection test works with Google AI API key",
+      "Evaluation produces consistent output format across all providers"
+    ],
+    "dependencies": ["ERIS-040"]
+  },
+  {
+    "id": "ERIS-045",
+    "type": "improvement",
+    "title": "Trim whitespace from pasted API keys during validation",
+    "description": "When users paste API keys that contain trailing whitespace or newline characters, the validation passes but API calls fail. The key should be trimmed before storage and validation.",
+    "status": "backlog",
+    "epic_id": "ERIS-004",
+    "priority": "low",
+    "labels": ["llm", "bug", "ux"],
+    "acceptance_criteria": [
+      "API keys are trimmed of whitespace before storage",
+      "Leading and trailing whitespace in pasted keys does not cause failures"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-048",
+    "type": "task",
+    "title": "Optimize SQLite query performance for assessment log",
+    "description": "The assessment log query becomes slow when the log exceeds 10,000 entries. Add indexes, implement pagination, and optimize the query to handle large datasets efficiently within SQLite.",
+    "status": "backlog",
+    "epic_id": "ERIS-007",
+    "priority": "medium",
+    "labels": ["database", "performance", "sqlite"],
+    "acceptance_criteria": [
+      "Assessment log loads within 2 seconds for up to 50,000 entries",
+      "Pagination with configurable page size (default 50)",
+      "Indexes added on frequently queried columns",
+      "Query execution plan verified with EXPLAIN"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-049",
+    "type": "task",
+    "title": "Optimize SQLite WAL checkpoint strategy for concurrent access",
+    "description": "The current SQLite WAL mode configuration uses default checkpointing, which can cause write starvation under concurrent load. Implement a custom checkpoint strategy to balance read and write performance.",
+    "status": "backlog",
+    "epic_id": "ERIS-007",
+    "priority": "low",
+    "labels": ["database", "performance", "sqlite"],
+    "acceptance_criteria": [
+      "Custom WAL checkpoint runs on configurable interval",
+      "Checkpoint does not block active read transactions",
+      "WAL file size stays within configured limits"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-050",
+    "type": "story",
+    "title": "Implement batch file upload with progress tracking",
+    "description": "Allow users to upload multiple files simultaneously for batch evaluation. Display progress indicators for each file showing upload, processing, and evaluation status.",
+    "status": "done",
+    "epic_id": "ERIS-005",
+    "priority": "high",
+    "labels": ["document-processing", "batch", "frontend"],
+    "acceptance_criteria": [
+      "Drag-and-drop or file picker for multiple files",
+      "Individual progress bar per file",
+      "Overall batch progress indicator",
+      "Failed files shown with error details without blocking others"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-051",
+    "type": "story",
+    "title": "Add duplicate file detection in batch uploads",
+    "description": "Detect and warn users when they upload duplicate files in a batch, either files with the same name or identical content hash. Allow users to skip or re-evaluate duplicates.",
+    "status": "done",
+    "epic_id": "ERIS-005",
+    "priority": "medium",
+    "labels": ["document-processing", "batch", "ux"],
+    "acceptance_criteria": [
+      "Detect duplicate file names within a batch",
+      "Detect identical file content via SHA-256 hash",
+      "Warning UI with option to skip or proceed",
+      "Previously evaluated documents also checked for duplicates"
+    ],
+    "dependencies": ["ERIS-050"]
+  },
+  {
+    "id": "ERIS-052",
+    "type": "bug",
+    "title": "PPTX files with embedded videos crash text extraction",
+    "description": null,
+    "status": "blocked",
+    "epic_id": "ERIS-005",
+    "priority": "high",
+    "labels": ["document-processing", "bug", "pptx"],
+    "acceptance_criteria": [
+      "PPTX files with embedded media do not crash the extraction pipeline",
+      "Non-text content is gracefully skipped with a note in the output",
+      "Error is logged with file details for debugging"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-053",
+    "type": "story",
+    "title": "Add OCR capability for image-only PDF documents",
+    "description": "Integrate an OCR library to extract text from scanned/image-only PDFs. Currently these documents produce empty text content, which results in meaningless risk scores.",
+    "status": "backlog",
+    "epic_id": "ERIS-005",
+    "priority": "medium",
+    "labels": ["document-processing", "ocr", "enhancement"],
+    "acceptance_criteria": [
+      "Image-only PDFs produce extracted text via OCR",
+      "OCR language configurable (default: English)",
+      "Processing time indication for OCR operations",
+      "Fallback to 'no text extracted' if OCR fails"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-054",
+    "type": "bug",
+    "title": "Large Excel files cause memory spike and server crash",
+    "description": "Uploading Excel files larger than 20MB causes the Node.js process to run out of memory and crash. The file-service loads the entire workbook into memory for text extraction. Need streaming or chunked processing.",
+    "status": "in_progress",
+    "epic_id": "ERIS-005",
+    "priority": "critical",
+    "labels": ["document-processing", "bug", "performance"],
+    "acceptance_criteria": [
+      "Excel files up to 100MB processed without memory crash",
+      "File size limit enforced at upload time with clear error",
+      "Processing uses streaming where possible"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-055",
+    "type": "task",
+    "title": "Add file type validation at upload endpoint",
+    "description": "",
+    "status": "done",
+    "epic_id": "ERIS-005",
+    "priority": "medium",
+    "labels": ["document-processing", "security", "backend"],
+    "acceptance_criteria": [
+      "Only allowed file extensions are accepted",
+      "MIME type check in addition to extension check",
+      "Clear error message for rejected file types"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-056",
+    "type": "story",
+    "title": "Implement email notification system for review queue events",
+    "description": "Send email notifications when documents are submitted to the review queue, when documents are assigned for review, and when review decisions are made. Configurable per user.",
+    "status": "backlog",
+    "epic_id": "ERIS-002",
+    "priority": "medium",
+    "labels": ["notifications", "review-queue", "email"],
+    "acceptance_criteria": [
+      "Email sent on document submission to queue",
+      "Email sent to reviewer on document assignment",
+      "Email sent to submitter on approve/decline decision",
+      "Users can opt out of notifications in settings"
+    ],
+    "dependencies": ["ERIS-020", "ERIS-021"]
+  },
+  {
+    "id": "ERIS-057",
+    "type": "story",
+    "title": "Implement in-app notification center for real-time alerts",
+    "description": "Build an in-app notification system that shows real-time alerts for review queue updates, system announcements, and evaluation completions. Notifications appear as a bell icon with unread count in the header.",
+    "status": "backlog",
+    "epic_id": "ERIS-002",
+    "priority": "low",
+    "labels": ["notifications", "frontend", "ux"],
+    "acceptance_criteria": [
+      "Bell icon in header with unread count badge",
+      "Dropdown panel showing recent notifications",
+      "Mark as read/unread functionality",
+      "Notification preferences per user"
+    ],
+    "dependencies": ["ERIS-056"]
+  },
+  {
+    "id": "ERIS-060",
+    "type": "story",
+    "title": "Implement regulation document CRUD operations",
+    "description": "Build the API and UI for creating, reading, updating, and deleting regulation documents. Each document has metadata (title, type, version, effective date) and content.",
+    "status": "in_progress",
+    "epic_id": "ERIS-006",
+    "priority": "high",
+    "labels": ["regulations", "backend", "frontend"],
+    "acceptance_criteria": [
+      "Create regulation with title, type, content, effective date",
+      "List regulations with search and filtering",
+      "Edit regulation metadata and content",
+      "Soft delete with Active/Inactive status toggle"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-061",
+    "type": "story",
+    "title": "Add version control for regulation documents",
+    "description": "Track changes to regulation documents with version history. Each edit creates a new version while preserving previous versions for audit and rollback purposes.",
+    "status": "backlog",
+    "epic_id": "ERIS-006",
+    "priority": "medium",
+    "labels": ["regulations", "versioning", "backend"],
+    "acceptance_criteria": [
+      "Each save creates a new version with timestamp and editor",
+      "Version history viewable for each document",
+      "Ability to view and compare previous versions",
+      "Rollback to any previous version"
+    ],
+    "dependencies": ["ERIS-060"]
+  },
+  {
+    "id": "ERIS-062",
+    "type": "story",
+    "title": "Integrate regulation documents into AI evaluation prompt",
+    "description": "Include active regulation documents as contextual reference material in the AI evaluation prompt so the LLM can assess documents against specific regulatory requirements rather than general knowledge.",
+    "status": "backlog",
+    "epic_id": "ERIS-006",
+    "priority": "high",
+    "labels": ["regulations", "llm", "integration"],
+    "acceptance_criteria": [
+      "Active regulations are included as context in AI prompts",
+      "Users can select which regulations to apply per evaluation",
+      "Token count monitoring to avoid exceeding model context limits",
+      "Performance impact measured and documented"
+    ],
+    "dependencies": ["ERIS-060", "ERIS-041"]
+  },
+  {
+    "id": "ERIS-063",
+    "type": "bug",
+    "title": "Regulation document preview does not hide Assessment Outcomes column",
+    "description": "The regulation document preview page incorrectly shows the Assessment Outcomes column from the evaluation view. This column should be hidden when viewing regulation documents since they are reference material, not evaluated content.",
+    "status": "done",
+    "epic_id": "ERIS-006",
+    "priority": "low",
+    "labels": ["regulations", "bug", "frontend"],
+    "acceptance_criteria": [
+      "Assessment Outcomes column hidden in regulation document preview",
+      "All other preview columns render correctly"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-064",
+    "type": "task",
+    "title": "Seed regulation library with initial export control documents",
+    "description": "Populate the regulation library with an initial set of commonly referenced export control regulations (EAR, ITAR summaries, EU Dual-Use Regulation) as seed data for new deployments.",
+    "status": "backlog",
+    "epic_id": "ERIS-006",
+    "priority": "low",
+    "labels": ["regulations", "data", "setup"],
+    "acceptance_criteria": [],
+    "dependencies": ["ERIS-060"]
+  },
+  {
+    "id": "ERIS-070",
+    "type": "task",
+    "title": "Set up PM2 ecosystem configuration for production",
+    "description": "",
+    "status": "done",
+    "epic_id": "ERIS-007",
+    "priority": "high",
+    "labels": ["devops", "pm2", "production"],
+    "acceptance_criteria": [
+      "ecosystem.config.js with production settings",
+      "Auto-restart on crash with max restart limit",
+      "Log rotation configured",
+      "Environment variables loaded from .env"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-071",
+    "type": "story",
+    "title": "Create automated deployment scripts for code and full deployments",
+    "description": "Create deploy-code.sh for code-only updates and deploy-full.sh for complete deployments including data. Scripts should handle SSH, file sync, PM2 restart, and post-deploy verification.",
+    "status": "done",
+    "epic_id": "ERIS-007",
+    "priority": "high",
+    "labels": ["devops", "deployment", "automation"],
+    "acceptance_criteria": [
+      "deploy-code.sh pushes code without affecting user data",
+      "deploy-full.sh performs complete deployment including data reset",
+      "Scripts validate SSH connectivity before deploying",
+      "Deployment log created for audit trail"
+    ],
+    "dependencies": ["ERIS-070"]
+  },
+  {
+    "id": "ERIS-072",
+    "type": "task",
+    "title": "Implement SSL/HTTPS setup with Let's Encrypt auto-renewal",
+    "description": "Configure HTTPS with Let's Encrypt certificates, automated renewal via certbot, and PM2 restart hooks for certificate updates.",
+    "status": "done",
+    "epic_id": "ERIS-007",
+    "priority": "high",
+    "labels": ["devops", "security", "ssl"],
+    "acceptance_criteria": [
+      "SSL certificates obtained via certbot",
+      "Auto-renewal cron job configured",
+      "PM2 restarts after certificate renewal",
+      "HTTP to HTTPS redirect in production"
+    ],
+    "dependencies": ["ERIS-070"]
+  },
+  {
+    "id": "ERIS-073",
+    "type": "story",
+    "title": "Add multi-environment deployment support (DEV/QA/UAT)",
+    "description": "Support deploying to multiple environments with environment-specific configuration. Each environment has its own server, database, and API keys.",
+    "status": "done",
+    "epic_id": "ERIS-007",
+    "priority": "medium",
+    "labels": ["devops", "deployment", "environments"],
+    "acceptance_criteria": [
+      "Deployment scripts accept environment parameter",
+      "Environment label displayed in application header",
+      "Environment-specific .env files supported",
+      "Build info shows current environment and version"
+    ],
+    "dependencies": ["ERIS-071"]
+  },
+  {
+    "id": "ERIS-074",
+    "type": "task",
+    "title": "Set up application health check endpoint and monitoring",
+    "description": "",
+    "status": "done",
+    "epic_id": "ERIS-007",
+    "priority": "medium",
+    "labels": ["devops", "monitoring", "backend"],
+    "acceptance_criteria": [
+      "GET /api/health returns server status, uptime, and version",
+      "Database connectivity check included",
+      "LLM provider connectivity status included"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-075",
+    "type": "bug",
+    "title": "Deploy script fails silently when SSH connection drops",
+    "description": "The deploy-code.sh script does not properly detect SSH connection failures. If the SSH session drops mid-deploy, the script reports success but the deployment is incomplete, leaving the server in a potentially broken state.",
+    "status": "blocked",
+    "epic_id": "ERIS-007",
+    "priority": "high",
+    "labels": ["devops", "bug", "deployment"],
+    "acceptance_criteria": [
+      "SSH connectivity verified before and after deployment",
+      "Deployment script exits with non-zero code on any SSH failure",
+      "Rollback procedure triggered on failed deployment"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-076",
+    "type": "task",
+    "title": "Implement database backup and restore procedures",
+    "description": "Create automated backup scripts for the SQLite database and review queue data. Backups should run on a schedule and be stored in a configurable location with rotation.",
+    "status": "backlog",
+    "epic_id": "ERIS-007",
+    "priority": "medium",
+    "labels": ["devops", "database", "backup"],
+    "acceptance_criteria": [
+      "Daily automated backup of SQLite database files",
+      "Backup stored in configurable directory with date-stamped filenames",
+      "Restore script that validates backup integrity before applying",
+      "Retention policy: keep last 30 daily backups"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-080",
+    "type": "improvement",
+    "title": "Add audit logging across all API endpoints",
+    "description": "Implement comprehensive audit logging that records all API calls with user identity, action, resource, timestamp, and result. This is needed for compliance and security audit requirements across all feature areas.",
+    "status": "backlog",
+    "epic_id": null,
+    "priority": "high",
+    "labels": ["security", "compliance", "cross-cutting", "audit"],
+    "acceptance_criteria": [
+      "All API endpoints log: user, action, resource, timestamp, IP, result",
+      "Audit log stored in dedicated database table",
+      "Audit log searchable by user, date range, action type",
+      "Audit log retention policy configurable",
+      "Log entries are tamper-resistant (append-only)"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-081",
+    "type": "improvement",
+    "title": "Implement request rate limiting across all endpoints",
+    "description": "Add rate limiting to prevent abuse and ensure fair resource allocation. Different rate limits for authenticated vs. unauthenticated requests, and higher limits for admin users.",
+    "status": "backlog",
+    "epic_id": null,
+    "priority": "medium",
+    "labels": ["security", "performance", "cross-cutting"],
+    "acceptance_criteria": [
+      "Rate limits applied to all API endpoints",
+      "Configurable limits per role (admin gets higher limits)",
+      "429 response with Retry-After header on limit exceeded",
+      "Rate limit state stored in memory (not database) for performance"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-082",
+    "type": "task",
+    "title": "Fix assessment log CSV export truncating long reasoning text",
+    "description": "When exporting the assessment log to CSV, the AI reasoning text is truncated at 500 characters. Long reasoning responses from the LLM are cut off, losing important analysis details in the export.",
+    "status": "backlog",
+    "epic_id": "ERIS-001",
+    "priority": "low",
+    "labels": ["logging", "bug", "export"],
+    "acceptance_criteria": [
+      "Full reasoning text included in CSV export",
+      "Special characters properly escaped in CSV",
+      "File size warning if export exceeds 50MB"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-083",
+    "type": "story",
+    "title": "Add Viewer role with read-only access to evaluation results",
+    "description": "Add a new Viewer role that can see evaluation results and the review queue but cannot submit documents, perform reviews, or change settings. This is for stakeholders who need visibility without action capability.",
+    "status": "backlog",
+    "epic_id": "ERIS-003",
+    "priority": "low",
+    "labels": ["auth", "rbac", "user-management"],
+    "acceptance_criteria": [
+      "New Viewer role added to role definitions",
+      "Viewer can see evaluation history and review queue",
+      "Viewer cannot submit, evaluate, review, or change settings",
+      "Role selectable when creating or editing users"
+    ],
+    "dependencies": ["ERIS-031"]
+  },
+  {
+    "id": "ERIS-084",
+    "type": "bug",
+    "title": "Concurrent file uploads overwrite temp files with same name",
+    "description": null,
+    "status": "blocked",
+    "epic_id": "ERIS-005",
+    "priority": "high",
+    "labels": ["document-processing", "bug", "concurrency"],
+    "acceptance_criteria": [
+      "Each upload uses a unique temporary filename (UUID prefix)",
+      "Concurrent uploads from multiple users do not interfere",
+      "Temporary files cleaned up after processing"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-085",
+    "type": "task",
+    "title": "Add end-to-end test suite for evaluation workflow",
+    "description": null,
+    "status": "backlog",
+    "epic_id": "ERIS-007",
+    "priority": "medium",
+    "labels": ["testing", "quality", "ci"],
+    "acceptance_criteria": [
+      "E2E tests cover: login, evaluate text, evaluate file, submit to review, approve",
+      "Tests run against a test database with fixture data",
+      "CI pipeline integration with pass/fail reporting"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-086",
+    "type": "improvement",
+    "title": "Refactor frontend to use component-based architecture",
+    "description": "The current vanilla JS frontend has grown complex with tightly coupled modules. Refactor to a cleaner component-based architecture with better state management, event handling, and testability.",
+    "status": "backlog",
+    "epic_id": "ERIS-007",
+    "priority": "low",
+    "labels": ["frontend", "tech-debt", "refactoring"],
+    "acceptance_criteria": null,
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-087",
+    "type": "bug",
+    "title": "Batch evaluation shows wrong file name in results for re-evaluated documents",
+    "description": "When a user re-evaluates a document from the batch results, the file name displayed in the results panel shows the previous document's name instead of the current one. This appears to be a stale state reference in the frontend.",
+    "status": "in_progress",
+    "epic_id": "ERIS-005",
+    "priority": "medium",
+    "labels": ["document-processing", "batch", "bug", "frontend"],
+    "acceptance_criteria": [
+      "File name in results always matches the evaluated document",
+      "State properly reset between sequential evaluations",
+      "Batch results panel accurately reflects current evaluation"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-088",
+    "type": "story",
+    "title": "Implement scheduled batch evaluation for automated processing",
+    "description": "Allow administrators to configure scheduled batch evaluations that automatically process documents from a designated folder. Documents are picked up on a cron schedule, evaluated, and results are stored in the assessment log.",
+    "status": "backlog",
+    "epic_id": "ERIS-005",
+    "priority": "low",
+    "labels": ["document-processing", "batch", "automation"],
+    "acceptance_criteria": [
+      "Admin can configure a watch folder path",
+      "Cron-style schedule for pickup interval",
+      "Processed documents moved to an archive folder",
+      "Results logged and optionally auto-submitted to review queue"
+    ],
+    "dependencies": ["ERIS-050"]
+  },
+  {
+    "id": "ERIS-089",
+    "type": "story",
+    "title": "Build dashboard for real-time evaluation metrics",
+    "description": "Create a dashboard page showing real-time metrics: evaluations today, average risk score, risk category distribution, LLM response times, and system health indicators. Available to admin and analyst roles.",
+    "status": "backlog",
+    "epic_id": null,
+    "priority": "medium",
+    "labels": ["analytics", "frontend", "dashboard"],
+    "acceptance_criteria": [
+      "Dashboard shows evaluations count for today/week/month",
+      "Risk category distribution pie chart",
+      "Average LLM response time trend",
+      "System health indicators (database, LLM connectivity)"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-090",
+    "type": "task",
+    "title": "Document API endpoints with OpenAPI/Swagger specification",
+    "description": "",
+    "status": "backlog",
+    "epic_id": "ERIS-007",
+    "priority": "low",
+    "labels": ["documentation", "api", "devops"],
+    "acceptance_criteria": [
+      "OpenAPI 3.0 spec covering all API endpoints",
+      "Swagger UI accessible at /api/docs in development",
+      "Request/response schemas documented with examples"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-091",
+    "type": "bug",
+    "title": "Review queue document preview fails for documents with special characters in filename",
+    "description": "Documents with special characters (spaces, ampersands, parentheses) in their filename fail to load in the review queue preview. The file path is not properly URL-encoded when constructing the preview request.",
+    "status": "backlog",
+    "epic_id": "ERIS-002",
+    "priority": "medium",
+    "labels": ["review-queue", "bug", "file-handling"],
+    "acceptance_criteria": [
+      "File paths properly URL-encoded in preview requests",
+      "Documents with spaces, ampersands, and parentheses in names load correctly",
+      "Consistent encoding across all endpoints that reference file paths"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-092",
+    "type": "story",
+    "title": "Add dark mode theme for evaluation interface",
+    "description": "Provide a dark mode toggle in user settings that switches the entire UI to a dark color scheme. Useful for analysts doing extended review sessions in low-light environments.",
+    "status": "backlog",
+    "epic_id": "ERIS-005",
+    "priority": "low",
+    "labels": ["frontend", "ux", "theme"],
+    "acceptance_criteria": [
+      "Dark mode toggle in user settings",
+      "All UI components styled for dark mode",
+      "Theme preference persists across sessions"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-093",
+    "type": "bug",
+    "title": "Session middleware crash for unauthenticated requests to static assets",
+    "description": "The session middleware throws an unhandled error when processing requests for static assets (CSS, JS, images) from unauthenticated users. This causes intermittent 500 errors on the login page.",
+    "status": "done",
+    "epic_id": "ERIS-003",
+    "priority": "critical",
+    "labels": ["auth", "bug", "middleware"],
+    "acceptance_criteria": [
+      "Static asset requests bypass session validation",
+      "Login page loads reliably without 500 errors",
+      "Session middleware handles missing session gracefully"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-094",
+    "type": "task",
+    "title": "Add input sanitization for evaluation text to prevent prompt injection",
+    "description": "Sanitize user-provided evaluation text to prevent prompt injection attacks that could manipulate the AI into ignoring risk assessment instructions or producing misleading results.",
+    "status": "in_progress",
+    "epic_id": "ERIS-004",
+    "priority": "high",
+    "labels": ["security", "llm", "backend"],
+    "acceptance_criteria": [
+      "Known prompt injection patterns detected and neutralized",
+      "Sanitization does not alter legitimate document content",
+      "Injection attempts logged for security review",
+      "Configurable sanitization rules"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-095",
+    "type": "story",
+    "title": "Implement export of evaluation results to PDF report",
+    "description": "Generate a formatted PDF report from evaluation results that includes document metadata, risk score, risk category, AI reasoning, trigger paragraphs, and review status. The report should be downloadable and printable.",
+    "status": "backlog",
+    "epic_id": "ERIS-001",
+    "priority": "medium",
+    "labels": ["export", "reporting", "frontend"],
+    "acceptance_criteria": [
+      "PDF report generated from evaluation results",
+      "Report includes: metadata, risk score, category, reasoning, triggers",
+      "Company logo and branding configurable",
+      "Download button available on evaluation results page"
+    ],
+    "dependencies": ["ERIS-010"]
+  },
+  {
+    "id": "ERIS-096",
+    "type": "story",
+    "title": "Add bulk user import from CSV for enterprise deployments",
+    "description": "Allow administrators to import multiple users at once via CSV upload, with columns for username, role, email, and temporary password. Useful for onboarding large teams.",
+    "status": "backlog",
+    "epic_id": "ERIS-003",
+    "priority": "low",
+    "labels": ["user-management", "admin", "enterprise"],
+    "acceptance_criteria": [],
+    "dependencies": ["ERIS-032"]
+  },
+  {
+    "id": "ERIS-097",
+    "type": "bug",
+    "title": "Risk score percentage displayed incorrectly in non-US locales",
+    "description": "In browser locales that use comma as decimal separator (e.g., de-DE, fr-FR), the risk score percentage is displayed incorrectly. A score of 75.5% might show as 75,5% or the formatting breaks entirely.",
+    "status": "backlog",
+    "epic_id": "ERIS-001",
+    "priority": "low",
+    "labels": ["frontend", "bug", "i18n"],
+    "acceptance_criteria": [
+      "Risk score always displayed with period as decimal separator",
+      "Consistent number formatting across all locales",
+      "No layout breaking from locale-specific number formats"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "ERIS-098",
+    "type": "improvement",
+    "title": "Add confirmation dialog before pushing global prompt to all users",
+    "description": "When an admin clicks 'Push Global Prompt', all user custom prompts are immediately overwritten without a confirmation dialog. This has caused accidental loss of carefully crafted user prompts.",
+    "status": "backlog",
+    "epic_id": "ERIS-004",
+    "priority": "medium",
+    "labels": ["llm", "prompts", "bug", "ux"],
+    "acceptance_criteria": [
+      "Confirmation dialog shown before pushing global prompt",
+      "Dialog shows count of users whose prompts will be overwritten",
+      "Option to exclude specific users from the push"
+    ],
+    "dependencies": []
+  }
+]
