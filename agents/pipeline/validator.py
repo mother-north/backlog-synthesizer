@@ -155,12 +155,11 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
     transcript = state.get("transcript", "")
     errors: list[PipelineError] = list(state.get("errors", []))
 
-    if progress_cb:
-        progress_cb({
-            "agent": "validator",
-            "status": "running",
-            "message": f"Validating grounding for {len(candidate_stories)} stories...",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "validator", "running", f"Validating grounding for {len(candidate_stories)} stories...")
+    except Exception:
+        pass
 
     start = time.time()
     validation_results: list[ValidationResult] = []
@@ -292,20 +291,11 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
     except Exception as te:
         logger.warning("Failed to write agent trace: %s", te)
 
-    if progress_cb:
-        progress_cb({
-            "agent": "validator",
-            "status": "done",
-            "message": (
-                f"Validation complete: {valid_count} valid, "
-                f"{warning_count} warnings, {invalid_count} invalid"
-            ),
-            "details": {
-                "valid": valid_count,
-                "warning": warning_count,
-                "invalid": invalid_count,
-            },
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "validator", "done", f"Validation complete: {valid_count} valid, {warning_count} warnings, {invalid_count} invalid")
+    except Exception:
+        pass
 
     # Update meeting status to in_review
     try:

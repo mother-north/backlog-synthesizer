@@ -327,12 +327,11 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
     except Exception:
         pass
 
-    if progress_cb:
-        progress_cb({
-            "agent": "memo",
-            "status": "done",
-            "message": f"Memo v{memo.version} generated ({len(memo.confirmed_stories)} confirmed, {len(memo.rejected_stories)} rejected, {len(memo.pending_stories)} pending)",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "memo", "done", "Memo generated")
+    except Exception:
+        pass
 
     return {
         "memo": memo,

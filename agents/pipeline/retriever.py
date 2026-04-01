@@ -94,12 +94,11 @@ async def retriever_agent(state: dict, config: dict | None = None) -> dict:
     requirements: list[Requirement] = state.get("requirements", [])
     errors: list[PipelineError] = list(state.get("errors", []))
 
-    if progress_cb:
-        progress_cb({
-            "agent": "retriever",
-            "status": "running",
-            "message": f"Searching knowledge base for {len(requirements)} requirements...",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "retriever", "running", f"Searching knowledge base for {len(requirements)} requirements...")
+    except Exception:
+        pass
 
     start = time.time()
     total_prompt_tokens = 0
@@ -254,14 +253,12 @@ async def retriever_agent(state: dict, config: dict | None = None) -> dict:
     except Exception as te:
         logger.warning("Failed to write agent trace: %s", te)
 
-    if progress_cb:
         total_items = sum(len(v) for v in context.values())
-        progress_cb({
-            "agent": "retriever",
-            "status": "done",
-            "message": f"Retrieved {total_items} context items for {len(requirements)} requirements",
-            "details": {"total_context_items": total_items},
-        })
+        try:
+            from tools.progress import update_progress
+            update_progress(meeting_id, "retriever", "done", f"Retrieved {total_items} context items for {len(requirements)} requirements")
+        except Exception:
+            pass
 
     return {
         "context": context,

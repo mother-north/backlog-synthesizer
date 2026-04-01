@@ -148,8 +148,11 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
                 message=f"Transcript for meeting {meeting_id} has fewer than 10 words.",
                 recoverable=False,
             ))
-            if progress_cb:
-                progress_cb({"agent": "parser", "status": "error", "message": "Transcript is empty or too short."})
+            try:
+                from tools.progress import update_progress
+                update_progress(meeting_id, "parser", "error", "Transcript is empty or too short.")
+            except Exception:
+                pass
             return {
                 "transcript": transcript,
                 "requirements": [],
@@ -171,8 +174,11 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
             message=str(e),
             recoverable=False,
         ))
-        if progress_cb:
-            progress_cb({"agent": "parser", "status": "error", "message": str(e)})
+        try:
+            from tools.progress import update_progress
+            update_progress(meeting_id, "parser", "error", "")
+        except Exception:
+            pass
         return {
             "transcript": state.get("transcript", ""),
             "requirements": [],

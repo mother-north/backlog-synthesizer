@@ -146,12 +146,11 @@ async def crossref_agent(state: dict, config: dict | None = None) -> dict:
     context: dict[str, list] = state.get("context", {})
     errors: list[PipelineError] = list(state.get("errors", []))
 
-    if progress_cb:
-        progress_cb({
-            "agent": "crossref",
-            "status": "running",
-            "message": f"Cross-referencing {len(requirements)} requirements against backlog and architecture...",
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "crossref", "running", f"Cross-referencing {len(requirements)} requirements...")
+    except Exception:
+        pass
 
     start = time.time()
     total_prompt = 0
@@ -265,16 +264,11 @@ async def crossref_agent(state: dict, config: dict | None = None) -> dict:
     except Exception as te:
         logger.warning("Failed to write agent trace: %s", te)
 
-    if progress_cb:
-        progress_cb({
-            "agent": "crossref",
-            "status": "done",
-            "message": f"Found {len(all_checks)} checks, {len(all_hygiene)} hygiene flags",
-            "details": {
-                "check_count": len(all_checks),
-                "hygiene_flag_count": len(all_hygiene),
-            },
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "crossref", "done", f"Found {len(all_checks)} checks, {len(all_hygiene)} hygiene flags")
+    except Exception:
+        pass
 
     return {
         "checks": all_checks,

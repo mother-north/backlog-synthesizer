@@ -448,19 +448,11 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
     except Exception as te:
         logger.warning("Failed to write agent trace: %s", te)
 
-    if progress_cb:
-        progress_cb({
-            "agent": "synthesizer",
-            "status": "done",
-            "message": (
-                f"Generated {len(candidate_stories)} stories, "
-                f"{len(epic_proposals)} epic proposals"
-            ),
-            "details": {
-                "story_count": len(candidate_stories),
-                "epic_proposal_count": len(epic_proposals),
-            },
-        })
+    try:
+        from tools.progress import update_progress
+        update_progress(meeting_id, "synthesizer", "done", f"Generated {len(candidate_stories)} stories, {len(epic_proposals)} epic proposals")
+    except Exception:
+        pass
 
     return {
         "candidate_stories": candidate_stories,
