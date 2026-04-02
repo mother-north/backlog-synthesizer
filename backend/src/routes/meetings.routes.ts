@@ -83,11 +83,21 @@ router.get('/', async (_req, res) => {
       `SELECT m.id, m.title, m.file_name, m.status, m.meeting_quality,
               m.pipeline_progress, m.uploaded_by, m.created_at,
               u.display_name as uploaded_by_name,
-              (SELECT COUNT(*) FROM stories s WHERE s.meeting_id = m.id) as story_count,
-              (SELECT COUNT(*) FROM stories s WHERE s.meeting_id = m.id AND s.status = 'confirmed') as confirmed_count,
-              (SELECT COUNT(*) FROM checks c JOIN stories s ON c.story_id = s.id WHERE s.meeting_id = m.id AND c.status = 'open') as open_checks
+              COALESCE(sc.story_count, 0) as story_count,
+              COALESCE(sc.confirmed_count, 0) as confirmed_count,
+              COALESCE(oc.open_checks, 0) as open_checks
        FROM meetings m
        LEFT JOIN users u ON u.id = m.uploaded_by
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) as story_count,
+                COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_count
+         FROM stories WHERE meeting_id = m.id
+       ) sc ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) as open_checks
+         FROM checks c JOIN stories s ON c.story_id = s.id
+         WHERE s.meeting_id = m.id AND c.status = 'open'
+       ) oc ON true
        ORDER BY m.created_at DESC`
     );
     res.json({ rows: result.rows, total: result.rowCount });
@@ -121,22 +131,23 @@ router.get('/:id', async (req, res) => {
 router.post('/upload',
   upload.single('transcript'),
   async (req: AuthRequest, res: Response) => {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
     const title = req.body.title;
     if (!title) {
       return res.status(400).json({ error: 'Meeting title is required' });
     }
 
+    const pasteText = req.body.pasteText;
+    if (!req.file && !pasteText) {
+      return res.status(400).json({ error: 'No file uploaded or text provided' });
+    }
+
     try {
-      const transcript = req.file.buffer.toString('utf-8');
-      const fileName = req.file.originalname;
+      const transcript = req.file ? req.file.buffer.toString('utf-8') : pasteText;
+      const fileName = req.file ? req.file.originalname : 'pasted-text.md';
 
       const result = await query(
         `INSERT INTO meetings (title, transcript, file_name, status, uploaded_by)
-         VALUES ($1, $2, $3, 'processing', $4) RETURNING *`,
+         VALUES ($1, $2, $3, 'uploaded', $4) RETURNING *`,
         [title, transcript, fileName, req.user!.id]
       );
 
@@ -162,13 +173,39 @@ router.post('/upload',
   }
 );
 
-// Trigger pipeline (proxy to FastAPI)
+// Delete meeting and all associated data
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  const meetingId = req.params.id;
+  try {
+    const meetingResult = await query('SELECT id, title FROM meetings WHERE id = $1', [meetingId]);
+    if (meetingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Meeting not found' });
+    }
+
+    await query('DELETE FROM checks WHERE story_id IN (SELECT id FROM stories WHERE meeting_id = $1)', [meetingId]);
+    await query('DELETE FROM decisions WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM stories WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM agent_traces WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM epics WHERE is_proposed = true AND proposed_by_meeting = $1', [meetingId]);
+    await query('DELETE FROM memos WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM backlog_hygiene_flags WHERE meeting_id = $1', [meetingId]);
+    await query('DELETE FROM audit_log WHERE entity_type = $1 AND entity_id = $2', ['meeting', meetingId]);
+    await query('DELETE FROM meetings WHERE id = $1', [meetingId]);
+
+    res.json({ message: 'Meeting deleted', meeting_id: parseInt(meetingId) });
+  } catch (error) {
+    logger.error('Delete meeting error:', error);
+    res.status(500).json({ error: 'Failed to delete meeting' });
+  }
+});
+
 // Re-evaluate: clear all stories/checks and re-trigger pipeline
 router.post('/:id/reevaluate', async (req: AuthRequest, res: Response) => {
   const meetingId = req.params.id;
   try {
     // Clear all associated data
     await query('DELETE FROM checks WHERE story_id IN (SELECT id FROM stories WHERE meeting_id = $1)', [meetingId]);
+    await query('DELETE FROM decisions WHERE meeting_id = $1', [meetingId]);
     await query('DELETE FROM stories WHERE meeting_id = $1', [meetingId]);
     await query('DELETE FROM agent_traces WHERE meeting_id = $1', [meetingId]);
     await query('DELETE FROM epics WHERE is_proposed = true AND proposed_by_meeting = $1', [meetingId]);
@@ -385,18 +422,50 @@ router.post('/:id/memos/generate', async (req: AuthRequest, res: Response) => {
       });
       if (agentsResponse.ok) {
         const data = await agentsResponse.json();
+        // Store the LLM-generated memo in DB so it appears on refresh
+        if (data.memo?.full_text) {
+          const versionResult = await query(
+            'SELECT COALESCE(MAX(version), 0) as max FROM memos WHERE meeting_id = $1',
+            [meetingId]
+          );
+          const newVersion = parseInt(versionResult.rows[0].max) + 1;
+          await query(
+            'INSERT INTO memos (meeting_id, version, content) VALUES ($1, $2, $3)',
+            [meetingId, newVersion, data.memo.full_text]
+          );
+        }
         return res.json(data);
       }
     } catch { /* FastAPI not available */ }
 
-    // Fallback: create a summary memo from DB data
-    const stories = await query(
-      `SELECT title, type, status, confidence FROM stories WHERE meeting_id = $1`,
+    // Fallback: create a rich summary memo from DB data
+    const meetingResult = await query(
+      `SELECT m.title, m.status, m.created_at, m.meeting_quality, left(m.transcript, 500) as transcript_start
+       FROM meetings m WHERE m.id = $1`,
       [meetingId]
     );
-    const confirmed = stories.rows.filter((s: any) => s.status === 'confirmed').length;
-    const rejected = stories.rows.filter((s: any) => s.status === 'rejected').length;
-    const pending = stories.rows.length - confirmed - rejected;
+    const meeting = meetingResult.rows[0] || {};
+
+    const stories = await query(
+      `SELECT s.title, s.type, s.status, s.confidence, s.speaker, e.title as epic_title, e.external_id as epic_ext
+       FROM stories s LEFT JOIN epics e ON e.id = s.epic_id
+       WHERE s.meeting_id = $1 ORDER BY s.status, s.id`,
+      [meetingId]
+    );
+
+    const checks = await query(
+      `SELECT c.check_type, c.status, c.resolution_notes, s.title as story_title
+       FROM checks c JOIN stories s ON s.id = c.story_id WHERE s.meeting_id = $1`,
+      [meetingId]
+    );
+
+    const confirmedStories = stories.rows.filter((s: any) => s.status === 'confirmed' || s.status === 'ready_to_push');
+    const rejectedStories = stories.rows.filter((s: any) => s.status === 'rejected');
+    const pendingStories = stories.rows.filter((s: any) => !['confirmed', 'rejected', 'ready_to_push'].includes(s.status));
+    const openChecks = checks.rows.filter((c: any) => c.status === 'open');
+    const resolvedChecks = checks.rows.filter((c: any) => c.status !== 'open');
+
+    const quality = meeting.meeting_quality || {};
 
     const versionResult = await query(
       'SELECT COALESCE(MAX(version), 0) as max FROM memos WHERE meeting_id = $1',
@@ -404,9 +473,28 @@ router.post('/:id/memos/generate', async (req: AuthRequest, res: Response) => {
     );
     const newVersion = parseInt(versionResult.rows[0].max) + 1;
 
-    const content = `# Decision Memo (v${newVersion})\n\n` +
-      `**Stories:** ${stories.rows.length} total — ${confirmed} confirmed, ${rejected} rejected, ${pending} pending\n\n` +
-      stories.rows.map((s: any) => `- [${s.status}] ${s.title} (${s.type}, ${s.confidence})`).join('\n');
+    const formatStoryList = (list: any[]) => list.length === 0 ? '_None_\n' :
+      list.map((s: any) => `- **${s.title}** (${s.type}) — Epic: ${s.epic_title || 'Unassigned'}${s.speaker ? `, Raised by: ${s.speaker}` : ''}`).join('\n') + '\n';
+
+    const content = `# Decision Memo: ${meeting.title || 'Meeting'} (v${newVersion})\n\n` +
+      `**Date:** ${meeting.created_at ? new Date(meeting.created_at).toLocaleDateString() : 'N/A'}\n` +
+      `**Status:** ${meeting.status || 'N/A'}\n\n` +
+      `## Meeting Summary\n\n` +
+      `${quality.recommendation || 'This meeting produced ' + stories.rows.length + ' candidate stories across ' + new Set(stories.rows.map((s: any) => s.epic_title).filter(Boolean)).size + ' epics.'}\n\n` +
+      `**Total Stories:** ${stories.rows.length} — ✅ ${confirmedStories.length} confirmed, ❌ ${rejectedStories.length} rejected, ⏳ ${pendingStories.length} in progress\n` +
+      `**Checks:** ${checks.rows.length} total — ${openChecks.length} open, ${resolvedChecks.length} resolved\n\n` +
+      `## Confirmed Stories (${confirmedStories.length})\n\n` +
+      formatStoryList(confirmedStories) + '\n' +
+      `## Rejected Stories (${rejectedStories.length})\n\n` +
+      formatStoryList(rejectedStories) + '\n' +
+      `## In Progress (${pendingStories.length})\n\n` +
+      formatStoryList(pendingStories) + '\n' +
+      (openChecks.length > 0 ? `## Open Checks (${openChecks.length})\n\n` +
+        openChecks.map((c: any) => `- **${c.story_title}**: ${c.check_type}`).join('\n') + '\n\n' : '') +
+      (quality.actionability ? `## Meeting Quality\n\n` +
+        `- Actionability: ${quality.actionability}\n` +
+        `- Requirements: ${quality.requirements || 'N/A'}\n` +
+        `- Ambiguous: ${quality.ambiguous || 0}\n` : '');
 
     const result = await query(
       'INSERT INTO memos (meeting_id, version, content) VALUES ($1, $2, $3) RETURNING *',

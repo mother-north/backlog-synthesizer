@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { Tag, Select, Button, Input, Space, Tooltip, App, Table, Modal, Descriptions } from 'antd';
+import { Tag, Select, Button, Input, Space, App, Table, Modal, Descriptions } from 'antd';
 import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   EditOutlined,
   SaveOutlined,
   CloseOutlined,
@@ -10,7 +8,7 @@ import {
   EyeOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
-import { storiesApi, dataApi } from '../services/api';
+import { storiesApi, dataApi, epicsApi } from '../services/api';
 import { statusColors, groundingColors } from '../theme';
 import CheckPanel from './CheckPanel';
 import ConfirmDialog from './ConfirmDialog';
@@ -43,6 +41,8 @@ interface Story {
   grounding_issues?: string[];
   acceptance_criteria: string[];
   source_citation: string;
+  speaker: string;
+  priority?: string | null;
   epic_id: number | null;
   epic?: Epic;
   checks: Check[];
@@ -67,8 +67,10 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
   const [saving, setSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<'confirm' | 'reject' | 'save' | null>(null);
   const [resolvingCheckId, setResolvingCheckId] = useState<number | null>(null);
+  const [expandedCheckKeys, setExpandedCheckKeys] = useState<number[]>([]);
   const [viewBacklogItem, setViewBacklogItem] = useState<any>(null);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showEpicReject, setShowEpicReject] = useState(false);
   const { message } = App.useApp();
 
   const fetchBacklogItem = async (externalId: string) => {
@@ -102,7 +104,6 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
 
   const openChecks = story.checks?.filter(c => c.status === 'open') || [];
   const hasNoEpic = !story.epic_id;
-  const canConfirm = openChecks.length === 0 && !hasNoEpic && story.status !== 'confirmed' && story.status !== 'rejected';
 
   const handleSaveEdit = async () => {
     setSaving(true);
@@ -151,33 +152,92 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
           {/* Epic assignment — inline */}
           <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <label style={{ fontSize: 13, color: 'var(--text-sec)', fontWeight: 500, whiteSpace: 'nowrap' }}>Epic:</label>
-            <Select
-              value={editEpicId || undefined}
-              onChange={(val) => {
-                setEditEpicId(val ?? null);
-                storiesApi.update(story.id, { epic_id: val ?? null } as any).then(() => {
-                  message.success('Epic updated');
-                  onUpdate();
-                }).catch(() => message.error('Failed to update epic'));
-              }}
-              style={{ minWidth: 300 }}
-              placeholder="Select epic..."
-              allowClear
-              size="small"
-              status={hasNoEpic ? 'error' : undefined}
-              options={epics.map(e => ({
-                value: e.id,
-                label: `${e.title}${e.is_proposed ? ' (proposed)' : ''}${e.external_id ? ` (${e.external_id})` : ''}`,
-              }))}
-            />
-            {hasNoEpic && <Tag color="red" icon={<ExclamationCircleOutlined />}>Required</Tag>}
+            {story.status === 'confirmed' || story.status === 'rejected' || story.status === 'ready_to_push' ? (
+              <span style={{ fontSize: 13, fontWeight: 500 }}>
+                {epics.find(e => e.id === story.epic_id)?.title || <span style={{ color: 'var(--gray-400)' }}>—</span>}
+                {epics.find(e => e.id === story.epic_id)?.external_id && (
+                  <Tag color="blue" style={{ marginLeft: 6 }}>{epics.find(e => e.id === story.epic_id)?.external_id}</Tag>
+                )}
+              </span>
+            ) : (
+              <Select
+                value={editEpicId || undefined}
+                onChange={(val) => {
+                  setEditEpicId(val ?? null);
+                  storiesApi.update(story.id, { epic_id: val ?? null } as any).then(() => {
+                    message.success('Epic updated');
+                    onUpdate();
+                  }).catch(() => message.error('Failed to update epic'));
+                }}
+                style={{ minWidth: 300 }}
+                placeholder="Select epic..."
+                allowClear
+                size="small"
+                status={hasNoEpic ? 'error' : undefined}
+                options={epics.map(e => ({
+                  value: e.id,
+                  label: `${e.title}${e.is_proposed ? ' (proposed)' : ''}${e.external_id ? ` (${e.external_id})` : ''}`,
+                }))}
+              />
+            )}
+            {hasNoEpic && story.status !== 'confirmed' && story.status !== 'rejected' && story.status !== 'ready_to_push' && (
+              <Tag color="red" icon={<ExclamationCircleOutlined />}>Required</Tag>
+            )}
+            {story.status !== 'confirmed' && story.status !== 'rejected' && story.status !== 'ready_to_push' && (() => {
+              const currentEpic = epics.find(e => e.id === story.epic_id);
+              return currentEpic?.is_proposed ? (
+                <>
+                  <Button size="small" type="primary" onClick={() => {
+                    epicsApi.approve(currentEpic.id).then(() => {
+                      message.success(`Epic "${currentEpic.title}" approved`);
+                      onUpdate();
+                    }).catch(() => message.error('Failed to approve epic'));
+                  }}>
+                    Approve Epic
+                  </Button>
+                  <Button size="small" danger onClick={() => setShowEpicReject(true)}>
+                    Reject Epic
+                  </Button>
+                </>
+              ) : null;
+            })()}
+          </div>
+
+          {/* Criticality */}
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 13, color: 'var(--text-sec)', fontWeight: 500, whiteSpace: 'nowrap' }}>Criticality:</label>
+            {story.status === 'confirmed' || story.status === 'rejected' || story.status === 'ready_to_push' ? (
+              <Tag color={story.priority === 'critical' ? 'red' : story.priority === 'high' ? 'orange' : story.priority === 'medium' ? 'blue' : story.priority === 'low' ? 'default' : 'default'}>
+                {story.priority || 'Undefined'}
+              </Tag>
+            ) : (
+              <Select
+                value={story.priority || undefined}
+                onChange={(val) => {
+                  storiesApi.update(story.id, { priority: val } as any).then(() => {
+                    message.success('Criticality updated');
+                    onUpdate();
+                  }).catch(() => message.error('Failed to update criticality'));
+                }}
+                style={{ minWidth: 150 }}
+                placeholder="Undefined"
+                allowClear
+                size="small"
+                options={[
+                  { value: 'critical', label: 'Critical' },
+                  { value: 'high', label: 'High' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'low', label: 'Low' },
+                ]}
+              />
+            )}
           </div>
 
           {/* Description */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <label style={{ fontSize: 12, color: 'var(--text-sec)' }}>Description</label>
-              {!editing && (
+              {!editing && story.status !== 'confirmed' && story.status !== 'rejected' && story.status !== 'ready_to_push' && (
                 <Button type="link" size="small" icon={<EditOutlined />} onClick={() => setEditing(true)}>Edit</Button>
               )}
             </div>
@@ -213,7 +273,13 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
 
           {/* Source Citation */}
           <div style={{ marginBottom: 16, padding: 12, background: 'var(--blue-50)', borderRadius: 6, borderLeft: '3px solid var(--accent)' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-sec)', marginBottom: 4 }}>Source Citation</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-sec)' }}>Source Citation</span>
+              <span style={{ fontSize: 12, color: 'var(--text-sec)' }}>—</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-800)' }}>
+                {story.speaker && story.speaker !== 'Unknown' ? story.speaker : 'Speaker not identified'}
+              </span>
+            </div>
             <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--gray-800)', margin: 0 }}>"{story.source_citation}"</p>
             <Button type="link" size="small" icon={<LinkOutlined />} style={{ paddingLeft: 0, marginTop: 4 }}
               onClick={() => setShowTranscript(true)}>
@@ -295,18 +361,35 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
                     ),
                   },
                   {
+                    title: 'Resolution',
+                    key: 'resolution',
+                    width: 160,
+                    ellipsis: true,
+                    render: (_: unknown, check: Check) => check.status !== 'open' && check.resolution_notes ? (
+                      <Tag color={check.resolution_notes === 'Accepted' ? 'success' : check.resolution_notes === 'Dismissed' ? 'red' : 'blue'}>
+                        {check.resolution_notes === 'Accepted' || check.resolution_notes === 'Dismissed' ? check.resolution_notes : 'Override'}
+                      </Tag>
+                    ) : null,
+                  },
+                  {
                     title: '',
                     key: 'action',
                     width: 80,
                     render: (_: unknown, check: Check) =>
                       check.status === 'open' && (userRoles.includes('Admin') || userRoles.includes(check.routed_to)) ? (
-                        <Button size="small" type="primary" onClick={(e) => { e.stopPropagation(); setResolvingCheckId(check.id); }}>
+                        <Button size="small" type="primary" onClick={(e) => {
+                          e.stopPropagation();
+                          setResolvingCheckId(check.id);
+                          setExpandedCheckKeys([check.id]);
+                        }}>
                           Resolve
                         </Button>
                       ) : null,
                   },
                 ]}
                 expandable={{
+                  expandedRowKeys: expandedCheckKeys,
+                  onExpandedRowsChange: (keys) => setExpandedCheckKeys(keys as number[]),
                   expandedRowRender: (check: Check) => (
                     <div style={{ padding: '8px 0' }}>
                       <div style={{ marginBottom: 8 }}>
@@ -328,8 +411,8 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
                       {resolvingCheckId === check.id && (
                         <CheckPanel
                           check={check}
-                          onClose={() => setResolvingCheckId(null)}
-                          onResolved={() => { setResolvingCheckId(null); onUpdate(); }}
+                          onClose={() => { setResolvingCheckId(null); setExpandedCheckKeys(prev => prev.filter(k => k !== check.id)); }}
+                          onResolved={() => { setResolvingCheckId(null); setExpandedCheckKeys(prev => prev.filter(k => k !== check.id)); onUpdate(); }}
                         />
                       )}
                     </div>
@@ -357,30 +440,6 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
               </ul>
             )}
           </div>
-
-          {/* Action buttons */}
-          {!editing && (
-            <Space>
-              <Tooltip title={!canConfirm ? (openChecks.length > 0 ? `${openChecks.length} open checks` : hasNoEpic ? 'No epic assigned' : '') : ''}>
-                <Button
-                  type="primary"
-                  icon={<CheckCircleOutlined />}
-                  disabled={!canConfirm}
-                  onClick={() => setConfirmDialog('confirm')}
-                >
-                  Confirm
-                </Button>
-              </Tooltip>
-              <Button
-                danger
-                icon={<CloseCircleOutlined />}
-                onClick={() => setConfirmDialog('reject')}
-                disabled={story.status === 'confirmed' || story.status === 'rejected'}
-              >
-                Reject
-              </Button>
-            </Space>
-          )}
 
           {/* Confirm dialogs */}
           <ConfirmDialog
@@ -413,6 +472,29 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
             loading={saving}
           />
 
+          {/* Epic Reject Dialog */}
+          <ConfirmDialog
+            open={showEpicReject}
+            title="Reject Epic"
+            message={`Reject epic "${epics.find(e => e.id === story.epic_id)?.title}"? Stories under this epic will be unassigned.`}
+            onConfirm={(input) => {
+              const currentEpic = epics.find(e => e.id === story.epic_id);
+              if (currentEpic && input) {
+                epicsApi.reject(currentEpic.id, { action: 'reject', rationale: input }).then(() => {
+                  message.success(`Epic "${currentEpic.title}" rejected`);
+                  onUpdate();
+                }).catch(() => message.error('Failed to reject epic'));
+              }
+              setShowEpicReject(false);
+            }}
+            onCancel={() => setShowEpicReject(false)}
+            confirmText="Reject Epic"
+            danger
+            requireInput
+            inputLabel="Rationale"
+            inputPlaceholder="Why is this epic being rejected?"
+          />
+
           {/* Transcript Preview Modal */}
           <Modal
             title="Source in Transcript"
@@ -441,12 +523,47 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
                 background: 'var(--gray-50)',
                 borderRadius: 8,
               }}>
-                <span dangerouslySetInnerHTML={{
-                  __html: transcript.replace(
-                    new RegExp(`(${story.source_citation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 200)})`, 'gi'),
-                    '<mark style="background:#ffd591; padding: 2px 4px; border-radius: 3px; font-weight: 600; border: 2px solid #fa8c16;">$1</mark>'
-                  ),
-                }} />
+                {(() => {
+                  // Strip quotes and find citation in transcript using normalized matching
+                  const clean = story.source_citation.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
+                  const normT = transcript.replace(/\*\*/g, '').replace(/[\u0014\u2014\u2013]/g, '-');
+                  const normC = clean.replace(/[\u0014\u2014\u2013]/g, '-');
+                  let snippet = normC.slice(0, 60);
+                  let normIdx = normT.toLowerCase().indexOf(snippet.toLowerCase());
+                  if (normIdx === -1) {
+                    snippet = normC.slice(0, 30);
+                    normIdx = normT.toLowerCase().indexOf(snippet.toLowerCase());
+                  }
+                  if (normIdx === -1) {
+                    return <span>{transcript}</span>;
+                  }
+                  // Map normalized index back to original transcript
+                  let origIdx = 0, normCount = 0;
+                  while (origIdx < transcript.length && normCount < normIdx) {
+                    if (transcript[origIdx] === '*' && transcript[origIdx + 1] === '*') { origIdx += 2; continue; }
+                    normCount++; origIdx++;
+                  }
+                  // Find end
+                  const endNorm = normIdx + normC.length;
+                  let origEnd = origIdx;
+                  let nc = normCount;
+                  while (origEnd < transcript.length && nc < endNorm) {
+                    if (transcript[origEnd] === '*' && transcript[origEnd + 1] === '*') { origEnd += 2; continue; }
+                    nc++; origEnd++;
+                  }
+                  const before = transcript.slice(0, origIdx);
+                  const match = transcript.slice(origIdx, origEnd);
+                  const after = transcript.slice(origEnd);
+                  return (
+                    <span>
+                      {before}
+                      <mark style={{ background: '#ffd591', padding: '2px 4px', borderRadius: 3, fontWeight: 600, border: '2px solid #fa8c16' }}>
+                        {match}
+                      </mark>
+                      {after}
+                    </span>
+                  );
+                })()}
               </div>
             ) : (
               <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray-400)' }}>

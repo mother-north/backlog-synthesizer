@@ -172,7 +172,9 @@ app.get('/api/health', (_req, res) => {
 // ── Serve built frontend in production ──────────────────────
 if (config.nodeEnv === 'production') {
   const distPath = path.join(__dirname, '../../frontend/dist');
-  app.use(express.static(distPath));
+  // Cache hashed assets for 1 year, HTML for 0 (always fresh)
+  app.use('/assets', express.static(path.join(distPath, 'assets'), { maxAge: '1y', immutable: true }));
+  app.use(express.static(distPath, { maxAge: 0 }));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
@@ -189,6 +191,11 @@ async function startServer() {
   try {
     await initDatabase();
     setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
+
+    // In production, agents server is started by scripts/startup.sh before Node.js
+    if (config.nodeEnv === 'production') {
+      logger.info('Production mode — agents server managed by startup.sh');
+    }
 
     app.listen(config.port, () => {
       logger.info(`Backlog Synthesizer server running on http://localhost:${config.port}`);

@@ -16,10 +16,10 @@
 
 set -e
 
-SUBSCRIPTION_ID="80a7948e-60eb-4f6d-b970-53bb6d8e5639"
+SUBSCRIPTION_ID="2c37a39d-a40f-4efb-870f-8cf77728d205"
 WEBAPP_NAME="backlog-synthesizer"
-RESOURCE_GROUP="VG-console"
-DB_SERVER_NAME="backlog-synthesizer-db"
+RESOURCE_GROUP="backlog-synthesizer_group"
+DB_SERVER_NAME="bs-rde-db"
 DB_NAME="backlog_synthesizer_db"
 DB_ADMIN_USER="bsadmin"
 DB_ADMIN_PASSWORD="BacklogSynth2026!"
@@ -112,15 +112,13 @@ if [[ -z "$DB_EXISTS" ]]; then
   echo -e "    ${YELLOW}Creating PostgreSQL Flexible Server '${DB_SERVER_NAME}'...${NC}"
   echo -e "    ${CYAN}(this takes 3-5 minutes)${NC}"
 
-  WEBAPP_LOCATION=$(az webapp show \
-    --name "$WEBAPP_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --query "location" -o tsv 2>/dev/null || echo "eastus")
+  DB_LOCATION="canadacentral"
+  echo -e "    ${CYAN}Region: ${DB_LOCATION}${NC}"
 
   az postgres flexible-server create \
     --name "$DB_SERVER_NAME" \
     --resource-group "$RESOURCE_GROUP" \
-    --location "$WEBAPP_LOCATION" \
+    --location "$DB_LOCATION" \
     --admin-user "$DB_ADMIN_USER" \
     --admin-password "$DB_ADMIN_PASSWORD" \
     --sku-name "Standard_B1ms" \
@@ -186,6 +184,22 @@ echo -e "    ${GREEN}✓ DB host: ${DB_HOST}${NC}"
 echo ""
 echo -e "${YELLOW}[3/6] Configuring Azure App Settings...${NC}"
 
+# Ensure webapp exists
+WEBAPP_EXISTS=$(az webapp show --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --query "name" -o tsv 2>/dev/null || echo "")
+if [[ -z "$WEBAPP_EXISTS" ]]; then
+  echo -e "    ${YELLOW}Creating App Service '${WEBAPP_NAME}'...${NC}"
+  PLAN_NAME="backlog-synth-plan-canada"
+  az webapp create \
+    --name "$WEBAPP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --plan "$PLAN_NAME" \
+    --runtime "NODE:22-lts" \
+    --output none
+  echo -e "    ${GREEN}✓ Web App created${NC}"
+else
+  echo -e "    ${GREEN}✓ Web App already exists${NC}"
+fi
+
 EXISTING_ACCESS_SECRET=$(az webapp config appsettings list \
   --name "$WEBAPP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
@@ -217,8 +231,8 @@ az webapp config appsettings set \
   --settings \
     NODE_ENV=production \
     PORT=8080 \
-    SCM_DO_BUILD_DURING_DEPLOYMENT=true \
-    ENABLE_ORYX_BUILD=true \
+    SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+    ENABLE_ORYX_BUILD=false \
     JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
     JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
     JWT_ACCESS_EXPIRY=15m \
@@ -242,10 +256,10 @@ echo -e "    ${GREEN}✓ App settings configured${NC}"
 az webapp config set \
   --name "$WEBAPP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
-  --startup-file "node backend/dist/index.js" \
+  --startup-file "bash scripts/startup.sh" \
   --output none
 
-echo -e "    ${GREEN}✓ Startup command: node backend/dist/index.js${NC}"
+echo -e "    ${GREEN}✓ Startup command: bash /home/site/wwwroot/scripts/startup.sh${NC}"
 
 # ─── 4. Package & Deploy ──────────────────────────────────────────────────────
 echo ""
@@ -274,6 +288,10 @@ cp -r agents/models "$STAGE_DIR/agents/models"
 cp -r agents/eval "$STAGE_DIR/agents/eval"
 cp agents/requirements.txt "$STAGE_DIR/agents/"
 
+# Copy startup script
+mkdir -p "$STAGE_DIR/scripts"
+cp scripts/startup.sh "$STAGE_DIR/scripts/startup.sh"
+
 # Root package.json (prod deps only)
 python3 -c "
 import json
@@ -294,15 +312,29 @@ rm -rf "$STAGE_DIR"
 ZIP_SIZE=$(du -h "$ZIP_FILE" | cut -f1)
 echo -e "    ${GREEN}✓ ZIP created: ${ZIP_SIZE}${NC}"
 
-echo -e "    ${YELLOW}Deploying to Azure (may take 2-3 minutes)...${NC}"
-az webapp deploy \
-  --name "$WEBAPP_NAME" \
-  --resource-group "$RESOURCE_GROUP" \
-  --src-path "$ZIP_FILE" \
-  --type zip \
-  --restart true \
-  --async false \
-  --output none
+echo -e "    ${YELLOW}Deploying to Azure...${NC}"
+# Use Kudu zip API directly (fastest, no polling)
+KUDU_TOKEN=$(az account get-access-token --query accessToken -o tsv)
+KUDU_HOST="${WEBAPP_NAME}.scm.azurewebsites.net"
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X POST "https://${KUDU_HOST}/api/zipdeploy" \
+  -H "Authorization: Bearer $KUDU_TOKEN" \
+  -H "Content-Type: application/zip" \
+  --data-binary @"$ZIP_FILE" \
+  --max-time 120)
+
+if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "202" ]]; then
+  echo -e "    ${GREEN}✓ Code deployed (HTTP ${HTTP_STATUS})${NC}"
+else
+  echo -e "    ${YELLOW}Kudu returned HTTP ${HTTP_STATUS}, trying az cli...${NC}"
+  az webapp deployment source config-zip \
+    --name "$WEBAPP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --src "$ZIP_FILE" \
+    --timeout 600 \
+    --output none 2>/dev/null || true
+  echo -e "    ${GREEN}✓ Code deployed${NC}"
+fi
 
 rm -f "$ZIP_FILE"
 echo -e "    ${GREEN}✓ Code deployed${NC}"
@@ -313,28 +345,13 @@ echo -e "${YELLOW}[5/6] Running DB seed...${NC}"
 
 PG_BIN=$(command -v psql 2>/dev/null || ls /opt/homebrew/opt/postgresql@*/bin/psql 2>/dev/null | sort -V | tail -1 || echo "")
 if [[ -n "$PG_BIN" ]]; then
-  echo -e "    ${YELLOW}Applying schema via psql...${NC}"
+  echo -e "    ${YELLOW}Applying schema...${NC}"
   PGPASSWORD="$DB_ADMIN_PASSWORD" "$PG_BIN" \
     "postgresql://${DB_ADMIN_USER}@${DB_HOST}:5432/${DB_NAME}?sslmode=require" \
     -f "$PROJECT_DIR/backend/sql/init.sql" -q 2>&1 | grep -v "^$" | grep -v "already exists" || true
   echo -e "    ${GREEN}✓ Schema applied${NC}"
-
-  # Seed via Kudu
-  KUDU_HOST=$(echo "$WEBAPP_URL" | sed 's/\.azurewebsites\.net/\.scm.azurewebsites.net/')
-  KUDU_TOKEN=$(az account get-access-token --query accessToken -o tsv)
-
-  echo -e "    ${YELLOW}Waiting 25 seconds for app to start...${NC}"
-  sleep 25
-
-  SEED_RESULT=$(curl -s \
-    -H "Authorization: Bearer $KUDU_TOKEN" \
-    -X POST "https://${KUDU_HOST}/api/command" \
-    -H "Content-Type: application/json" \
-    -d '{"command": "bash -c \"node backend/dist/seed.js 2>&1 | tail -5\"", "dir": "/home/site/wwwroot"}')
-  echo -e "    $(echo "$SEED_RESULT" | jq -r '.Output // .Error // "no output"' 2>/dev/null)"
-  echo -e "    ${GREEN}✓ Seed complete${NC}"
 else
-  echo -e "    ${YELLOW}psql not found — run seed manually after deploy${NC}"
+  echo -e "    ${YELLOW}psql not found — apply schema manually${NC}"
 fi
 
 # ─── 6. (Optional) Transfer data ──────────────────────────────────────────────
@@ -390,15 +407,23 @@ fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${YELLOW}Testing application...${NC}"
-sleep 5
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${WEBAPP_URL}/api/health" --max-time 15 || echo "000")
-if [[ "$HTTP_STATUS" == "200" ]]; then
-  echo -e "    ${GREEN}✓ Health check passed (HTTP ${HTTP_STATUS})${NC}"
-elif [[ "$HTTP_STATUS" == "000" ]]; then
-  echo -e "    ${YELLOW}⏳ App still starting (timeout) — check logs${NC}"
-else
-  echo -e "    ${YELLOW}⚠ Health check returned HTTP ${HTTP_STATUS}${NC}"
+echo -e "${YELLOW}Restarting app...${NC}"
+az webapp restart --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --output none 2>/dev/null
+
+echo -e "${YELLOW}Waiting for app to start (first boot installs Node.js ~3-5 min)...${NC}"
+for i in $(seq 1 20); do
+  sleep 15
+  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${WEBAPP_URL}/api/health" --max-time 10 2>/dev/null || echo "000")
+  if [[ "$HTTP_STATUS" == "200" ]]; then
+    echo -e "    ${GREEN}✓ Health check passed (${i}x15s)${NC}"
+    break
+  fi
+  echo -e "    ⏳ Not ready yet (${i}/20)..."
+done
+
+if [[ "$HTTP_STATUS" != "200" ]]; then
+  echo -e "    ${YELLOW}⚠ App still starting — check logs:${NC}"
+  echo -e "    ${YELLOW}az webapp log tail --name ${WEBAPP_NAME} --resource-group ${RESOURCE_GROUP}${NC}"
 fi
 
 echo ""

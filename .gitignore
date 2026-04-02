@@ -2,6 +2,7 @@
 node_modules/
 .venv/
 agents/.venv/
+.application
 
 # Build output
 dist/

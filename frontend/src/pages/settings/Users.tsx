@@ -7,7 +7,7 @@ import { usersApi, rolesApi } from '../../services/api';
 interface User {
   id: number;
   email: string;
-  displayName?: string;
+  display_name?: string;
   roles: string[];
   created_at: string;
 }
@@ -43,13 +43,13 @@ export default function Users() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleSave = async (values: { email: string; password?: string; displayName?: string; roles: string[] }) => {
+  const handleSave = async (values: { email: string; password?: string; display_name?: string; roles: string[] }) => {
     try {
       if (editingUser) {
-        await usersApi.update(editingUser.id, { email: values.email, displayName: values.displayName, roles: values.roles });
+        await usersApi.update(editingUser.id, { email: values.email, displayName: values.display_name, roles: values.roles });
         message.success('User updated');
       } else {
-        await usersApi.create({ email: values.email, password: values.password!, displayName: values.displayName, roles: values.roles });
+        await usersApi.create({ email: values.email, password: values.password!, displayName: values.display_name, roles: values.roles });
         message.success('User created');
       }
       setModalOpen(false);
@@ -85,7 +85,7 @@ export default function Users() {
 
   const openEdit = (user: User) => {
     setEditingUser(user);
-    form.setFieldsValue({ email: user.email, displayName: user.displayName, roles: user.roles });
+    form.setFieldsValue({ email: user.email, display_name: user.display_name, roles: user.roles });
     setModalOpen(true);
   };
 
@@ -97,7 +97,7 @@ export default function Users() {
 
   const columns: ColumnsType<User> = [
     { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a, b) => a.email.localeCompare(b.email) },
-    { title: 'Display Name', dataIndex: 'displayName', key: 'name', sorter: (a, b) => (a.displayName || '').localeCompare(b.displayName || ''), render: (v: string) => v || '-' },
+    { title: 'Display Name', dataIndex: 'display_name', key: 'name', sorter: (a, b) => (a.display_name || '').localeCompare(b.display_name || ''), render: (v: string) => v || '-' },
     {
       title: 'Roles',
       dataIndex: 'roles',
@@ -165,7 +165,7 @@ export default function Users() {
               <Input.Password />
             </Form.Item>
           )}
-          <Form.Item name="displayName" label="Display Name">
+          <Form.Item name="display_name" label="Display Name">
             <Input />
           </Form.Item>
           <Form.Item name="roles" label="Roles" rules={[{ required: true }]}>

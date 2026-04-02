@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Modal, Input, Upload, Tag, Skeleton, App, Empty } from 'antd';
+import { Table, Button, Modal, Input, Upload, Tag, Skeleton, App, Empty, Radio } from 'antd';
 import { UploadOutlined, InboxOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { meetingsApi } from '../services/api';
@@ -12,7 +12,7 @@ interface Meeting {
   title: string;
   created_at: string;
   status: string;
-  stories_count?: number;
+  story_count?: number;
   confirmed_count?: number;
   open_checks?: number;
 }
@@ -30,8 +30,15 @@ export default function MeetingsList() {
   const [pasteText, setPasteText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const savedView = localStorage.getItem('meetings_view') || 'all';
+  const [view, setView] = useState<string>(savedView);
   const navigate = useNavigate();
   const { message } = App.useApp();
+
+  const handleViewChange = (v: string) => {
+    setView(v);
+    localStorage.setItem('meetings_view', v);
+  };
 
   const fetchMeetings = async () => {
     setLoading(true);
@@ -116,19 +123,19 @@ export default function MeetingsList() {
       title: 'Stories',
       key: 'stories',
       render: (_, record) => (
-        <span>
-          {record.confirmed_count ?? '-'} / {record.stories_count ?? '-'}
-        </span>
+        <a onClick={(e) => { e.stopPropagation(); navigate(`/meetings/${record.id}#stories`); }}>
+          {record.confirmed_count ?? 0} / {record.story_count ?? 0}
+        </a>
       ),
     },
     {
       title: 'Open Checks',
       dataIndex: 'open_checks',
       key: 'open_checks',
-      render: (count: number | undefined) =>
+      render: (count: number | undefined, record: any) =>
         count === undefined || count === null ? '-' :
         count === 0 ? <Tag color="success">0</Tag> :
-        <Tag color="warning">{count}</Tag>,
+        <a onClick={(e: any) => { e.stopPropagation(); navigate(`/meetings/${record.id}#stories`); }}><Tag color="warning" style={{ cursor: 'pointer' }}>{count}</Tag></a>,
     },
   ];
 
@@ -137,23 +144,36 @@ export default function MeetingsList() {
       <div className="bs-breadcrumbs">Meetings</div>
       <div className="bs-page-header">
         <h1 className="bs-page-title">Meetings</h1>
-        <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>
-          Upload Transcript
-        </Button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Radio.Group value={view} onChange={e => handleViewChange(e.target.value)} buttonStyle="solid" size="middle">
+            <Radio.Button value="in_review">In Review ({meetings.filter(m => m.status === 'in_review' || m.status === 'processing').length})</Radio.Button>
+            <Radio.Button value="uploaded">Uploaded ({meetings.filter(m => m.status === 'uploaded').length})</Radio.Button>
+            <Radio.Button value="all">All ({meetings.length})</Radio.Button>
+          </Radio.Group>
+          <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>
+            Upload Transcript
+          </Button>
+        </div>
       </div>
 
-      {loading ? (
+      {(() => {
+        const filtered = meetings.filter(m => {
+          if (view === 'in_review') return m.status === 'in_review' || m.status === 'processing';
+          if (view === 'uploaded') return m.status === 'uploaded';
+          return true;
+        });
+        return loading ? (
         <Skeleton active paragraph={{ rows: 8 }} />
-      ) : meetings.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Empty
           image={<FileTextOutlined style={{ fontSize: 48, color: 'var(--gray-400)' }} />}
-          description="No meetings yet"
+          description={meetings.length === 0 ? "No meetings yet" : `No ${view === 'in_review' ? 'meetings in review' : view === 'uploaded' ? 'uploaded meetings' : 'meetings'}`}
         >
-          <Button type="primary" onClick={() => setUploadOpen(true)}>Upload Your First Transcript</Button>
+          {meetings.length === 0 && <Button type="primary" onClick={() => setUploadOpen(true)}>Upload Your First Transcript</Button>}
         </Empty>
       ) : (
         <Table
-          dataSource={meetings}
+          dataSource={filtered}
           columns={columns}
           rowKey="id"
           onRow={(record) => ({
@@ -162,7 +182,8 @@ export default function MeetingsList() {
           })}
           pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
         />
-      )}
+      );
+      })()}
 
       {/* Upload Modal */}
       <Modal
@@ -171,7 +192,11 @@ export default function MeetingsList() {
         onCancel={() => setUploadOpen(false)}
         footer={[
           <Button key="cancel" onClick={() => setUploadOpen(false)}>Cancel</Button>,
-          <Button key="process" type="primary" loading={uploading} onClick={() => setShowConfirm(true)}>
+          <Button key="process" type="primary" loading={uploading} onClick={() => {
+            if (!uploadTitle.trim()) { message.error('Please enter a meeting title'); return; }
+            if (!uploadFile && !pasteText.trim()) { message.error('Please upload a file or paste transcript text'); return; }
+            setShowConfirm(true);
+          }}>
             Process
           </Button>,
         ]}

@@ -170,6 +170,14 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
             update_progress(meeting_id, "validator", "done", "No stories to validate.")
         except Exception:
             pass
+        # No stories — mark meeting as completed
+        try:
+            execute_write(
+                "UPDATE meetings SET status = 'completed' WHERE id = %s",
+                (meeting_id,),
+            )
+        except Exception:
+            pass
         return {"validation_results": [], "errors": errors}
 
     # Re-read transcript if not in state

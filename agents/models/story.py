@@ -38,7 +38,9 @@ class CheckType(str, Enum):
     architecture = "architecture"
     prior_decision = "prior_decision"
     dependency = "dependency"
+    priority = "priority"
     no_epic = "no_epic"
+    new_epic = "new_epic"
     nfr_violation = "nfr_violation"
     ambiguity = "ambiguity"
 
@@ -71,13 +73,22 @@ class PrioritySignal(BaseModel):
     deadline: Optional[str] = None
 
 
+class Priority(str, Enum):
+    critical = "critical"
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
 class Requirement(BaseModel):
     """A single requirement extracted from the meeting transcript."""
     id: Optional[str] = None
     description: str
     source_citation: str = Field(..., description="Exact quote from transcript")
+    speaker: str = Field("", description="Who said it (e.g. 'Sarah (PM)'), or 'Unknown' if unclear")
     type: RequirementType
     granularity: Granularity
+    priority: Priority = Priority.medium
     priority_signals: list[PrioritySignal] = Field(default_factory=list)
     ambiguity_flags: list[AmbiguityFlag] = Field(default_factory=list)
     confidence: Confidence = Confidence.medium
@@ -104,8 +115,10 @@ class CandidateStory(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     feature_tags: list[str] = Field(default_factory=list)
     priority_signals: list[PrioritySignal] = Field(default_factory=list)
+    priority: Optional[str] = None  # critical | high | medium | low | None (undefined)
     confidence: Confidence = Confidence.medium
     source_citation: str = ""
+    speaker: str = ""
     epic_id: Optional[str] = None  # existing epic external_id
     proposed_epic: Optional[str] = None  # proposed epic name if no existing match
     checks: list[Check] = Field(default_factory=list)

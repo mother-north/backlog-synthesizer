@@ -1,13 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Select, Tag, Skeleton, Empty, App } from 'antd';
+import { Table, Tag, Skeleton, Empty, App } from 'antd';
 import {
-  WarningOutlined,
-  PlusCircleOutlined,
-  CheckCircleOutlined,
-  SwapOutlined,
-  LinkOutlined,
   BellOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { checksApi } from '../services/api';
@@ -24,21 +20,13 @@ interface Action {
   routed_to: string;
 }
 
-const TYPE_ICONS: Record<string, React.ReactNode> = {
-  priority: <WarningOutlined style={{ color: 'var(--warning)' }} />,
-  new_epic: <PlusCircleOutlined style={{ color: 'var(--accent)' }} />,
-  confirmation: <CheckCircleOutlined style={{ color: 'var(--success)' }} />,
-  overlap: <SwapOutlined style={{ color: 'var(--warning)' }} />,
-  dependency: <LinkOutlined style={{ color: 'var(--accent)' }} />,
-  architecture: <WarningOutlined style={{ color: 'var(--error)' }} />,
-  no_epic: <WarningOutlined style={{ color: 'var(--error)' }} />,
-};
+function formatType(type: string): string {
+  return (type || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+}
 
 export default function ActionList() {
   const [actions, setActions] = useState<Action[]>([]);
   const [loading, setLoading] = useState(true);
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [meetingFilter, setMeetingFilter] = useState<string>('all');
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { message } = App.useApp();
@@ -52,60 +40,71 @@ export default function ActionList() {
     }).finally(() => setLoading(false));
   }, [message]);
 
-  const filtered = actions.filter(a => {
-    if (typeFilter !== 'all' && a.type !== typeFilter) return false;
-    if (meetingFilter !== 'all' && String(a.meeting_id) !== meetingFilter) return false;
-    return true;
-  });
-
-  const meetingOptions = Array.from(new Map(actions.map(a => [a.meeting_id, a.meeting || `Meeting ${a.meeting_id}`])));
-
   const columns: ColumnsType<Action> = [
     {
-      title: 'Type',
-      dataIndex: 'type',
-      key: 'type',
-      filters: Array.from(new Set(filtered.map(a => a.type))).filter(Boolean).map(v => ({ text: (v || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()), value: v })),
-      onFilter: (value, record) => record.type === value,
-      render: (type: string) => (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {TYPE_ICONS[type] || <WarningOutlined />}
-          <span>{(type || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</span>
+      title: 'ID',
+      key: 'id',
+      width: 70,
+      render: (_: unknown, record: Action) => (
+        <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>
+          {record.check_id || record.story_id || '—'}
         </span>
       ),
     },
     {
-      title: 'Story / Item',
+      title: 'Type',
+      dataIndex: 'type',
+      key: 'type',
+      width: 140,
+      filters: Array.from(new Set(actions.map(a => a.type))).filter(Boolean).map(v => ({ text: formatType(v), value: v })),
+      onFilter: (value, record) => record.type === value,
+      render: (type: string) => <Tag color={type === 'confirmation' ? 'blue' : type === 'overlap' || type === 'priority' ? 'warning' : type === 'architecture' || type === 'no_epic' ? 'error' : 'default'}>{formatType(type)}</Tag>,
+    },
+    {
+      title: 'Story',
       dataIndex: 'item',
       key: 'story',
-      render: (title: string) => <span style={{ fontWeight: 500 }}>{title || '-'}</span>,
+      ellipsis: true,
+      render: (title: string, record: Action) => record.story_id ? (
+        <a onClick={(e) => { e.stopPropagation(); navigate(`/meetings/${record.meeting_id}#stories`); }}
+          style={{ fontWeight: 500 }}>
+          {title || `Story #${record.story_id}`}
+        </a>
+      ) : (
+        <span style={{ fontWeight: 500 }}>{title || '—'}</span>
+      ),
     },
     {
       title: 'Meeting',
-      dataIndex: 'meeting',
       key: 'meeting',
-    },
-    {
-      title: 'Date',
-      dataIndex: 'created_at',
-      key: 'date',
-      sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      defaultSortOrder: 'descend',
-      render: (date: string) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      width: 200,
+      ellipsis: true,
+      filters: Array.from(new Map(actions.map(a => [a.meeting_id, a.meeting || `Meeting #${a.meeting_id}`]))).map(([id, title]) => ({ text: title, value: id })),
+      onFilter: (value, record) => record.meeting_id === value,
+      render: (_: unknown, record: Action) => (
+        <a onClick={(e) => { e.stopPropagation(); navigate(`/meetings/${record.meeting_id}`); }}
+          style={{ fontSize: 12 }}>
+          <LinkOutlined style={{ marginRight: 4 }} />{record.meeting || `Meeting #${record.meeting_id}`}
+        </a>
+      ),
     },
     {
       title: 'Role',
       dataIndex: 'routed_to',
       key: 'role',
-      filters: Array.from(new Set(filtered.map(a => a.routed_to))).filter(Boolean).map(v => ({ text: v, value: v })),
+      width: 100,
+      filters: Array.from(new Set(actions.map(a => a.routed_to))).filter(Boolean).map(v => ({ text: v, value: v })),
       onFilter: (value, record) => record.routed_to === value,
       render: (role: string) => <Tag color="blue">{role}</Tag>,
     },
     {
-      title: '',
-      key: 'go',
-      width: 60,
-      render: () => <span style={{ color: 'var(--accent)', cursor: 'pointer' }}>Go</span>,
+      title: 'Date',
+      dataIndex: 'created_at',
+      key: 'date',
+      width: 100,
+      sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      defaultSortOrder: 'descend',
+      render: (date: string) => date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—',
     },
   ];
 
@@ -119,47 +118,23 @@ export default function ActionList() {
         </h1>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <Select
-          value={typeFilter}
-          onChange={setTypeFilter}
-          style={{ width: 180 }}
-          options={[
-            { value: 'all', label: 'Type: All' },
-            ...Array.from(new Set(actions.map(a => a.type).filter(Boolean))).map(t => ({
-              value: t,
-              label: (t || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-            })),
-          ]}
-        />
-        <Select
-          value={meetingFilter}
-          onChange={setMeetingFilter}
-          style={{ width: 200 }}
-          options={[
-            { value: 'all', label: 'Meeting: All' },
-            ...meetingOptions.map(([id, title]) => ({ value: String(id), label: title })),
-          ]}
-        />
-      </div>
-
       {loading ? (
         <Skeleton active paragraph={{ rows: 8 }} />
-      ) : filtered.length === 0 ? (
+      ) : actions.length === 0 ? (
         <Empty
           image={<BellOutlined style={{ fontSize: 48, color: 'var(--gray-400)' }} />}
           description="No pending actions - you're all caught up!"
         />
       ) : (
         <Table
-          dataSource={filtered}
+          dataSource={actions}
           columns={columns}
-          rowKey={(record) => `${record.type}-${record.check_id || ''}-${record.story_id || ''}-${record.meeting_id}-${record.created_at}`}
+          rowKey={(record) => `${record.type}-${record.check_id || ''}-${record.story_id || ''}-${record.meeting_id}`}
           onRow={(record) => ({
-            onClick: () => navigate(`/meetings/${record.meeting_id}?story=${record.story_id}`),
+            onClick: () => navigate(`/meetings/${record.meeting_id}#stories`),
             style: { cursor: 'pointer' },
           })}
-          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} items` }}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} actions` }}
         />
       )}
     </div>

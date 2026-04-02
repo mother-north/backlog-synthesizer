@@ -25,8 +25,9 @@ Single database (PostgreSQL + pgvector) handles all persistence: structured data
 
 | Table | Persists | Written By |
 |---|---|---|
+| `refresh_tokens` | Refresh tokens for JWT auth (id, user_id, token, expires_at, created_at) | Auth routes |
 | `meetings` | Transcript, status, quality metrics | UI upload + Agent 5 |
-| `stories` | Candidate/confirmed stories, original content | Agent 4 + UI (edits) |
+| `stories` | Candidate/confirmed stories, original content, speaker attribution (VARCHAR(200)) | Agent 4 + UI (edits) |
 | `checks` | Per-story checks, resolutions | Agent 3 + UI (resolutions) |
 | `epics` | Existing + proposed epics, approval status | Agent 4 + UI (approval) |
 | `decisions` | All human decisions with rationale | UI |
@@ -45,58 +46,35 @@ Single database (PostgreSQL + pgvector) handles all persistence: structured data
 
 ## Pipeline State Persistence
 
-### LangGraph Checkpointing
-
-Pipeline state is checkpointed to PostgreSQL via `PostgresSaver`. This enables:
-
-- **Pause/resume**: Pipeline pauses at `human_review` node, resumes hours/days later
-- **Crash recovery**: If pipeline fails mid-run, resume from last completed node
-- **Edit re-run**: Resume from checkpoint, route to `crossref` for re-checking
-
-```sql
--- LangGraph manages this table automatically
-CREATE TABLE checkpoints (
-    thread_id VARCHAR(255),
-    checkpoint_id VARCHAR(255),
-    parent_id VARCHAR(255),
-    checkpoint JSONB,          -- full pipeline state
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT NOW(),
-    PRIMARY KEY (thread_id, checkpoint_id)
-);
-```
+Pipeline state flows through an in-memory dict during execution. Progress is tracked via the `meetings.pipeline_progress` JSONB column, which the frontend polls every 3 seconds.
 
 ### State Lifecycle
 
 ```
-Meeting uploaded → Pipeline starts → thread_id = meeting_{id}
+Meeting uploaded → Pipeline starts
     ↓
-Agent 1 (Parser) completes → checkpoint saved
+Agent 1 (Parser) completes → progress written to meetings.pipeline_progress
     ↓
-Agent 2 (Retriever) completes → checkpoint saved
+Agent 2 (Retriever) completes → progress updated
     ↓
-Agent 3 (Cross-Ref) completes → checkpoint saved
+Agent 3 (Cross-Ref) completes → progress updated
     ↓
-Agent 4 (Synthesis) completes → checkpoint saved
+Agent 4 (Synthesis) completes → progress updated
     ↓
-Validator completes → checkpoint saved
+Validator completes → results saved to DB → pipeline COMPLETE
     ↓
-human_review → PAUSED (state persisted, pipeline idle)
+User reviews in UI → edits saved to DB (no pipeline re-run)
     ↓
-User acts via UI → pipeline RESUMED from checkpoint
-    ↓
-Route to crossref (edit) or memo (done)
-    ↓
-Agent 5 (Memo) → checkpoint saved → pipeline COMPLETE
+Memo generated on demand via separate endpoint
 ```
 
 ### Persistence Rules
 
 | Data | Persisted When | Persisted Where | Retention |
 |---|---|---|---|
-| Pipeline checkpoint | After each agent completes | `checkpoints` table | Until meeting completed, then archived |
-| Extracted requirements | After Agent 1 | `checkpoints` (in state) | Transferred to `stories` by Agent 4 |
-| Retrieved context | After Agent 2 | `checkpoints` (in state) | Session-scoped, not persisted long-term |
+| Pipeline progress | After each agent completes | `meetings.pipeline_progress` (JSONB) | Permanent |
+| Extracted requirements | After Agent 1 | In-memory state | Transferred to `stories` by Agent 4 |
+| Retrieved context | After Agent 2 | In-memory state | Session-scoped, not persisted long-term |
 | Checks | After Agent 3 | `checks` table | Permanent |
 | Candidate stories | After Agent 4 | `stories` table | Permanent |
 | Validation results | After Validator | `stories.grounding_status` + `stories.grounding_issues` | Permanent |
@@ -197,7 +175,7 @@ Prompt: "Consolidate the memory and audit design. Define what gets persisted whe
 Key decisions:
 - Single database for everything (no external stores)
 - Three-layer KB maps to: pgvector embeddings, relational tables, raw text columns
-- LangGraph checkpoints in PostgreSQL enable pause/resume and crash recovery
+- Pipeline state is in-memory; progress tracked via meetings.pipeline_progress JSONB column
 - Retrieved context is session-scoped (not persisted) — only confirmed outputs persist long-term
 - Audit trail is 3 levels, reconstructable per story via table joins
 - Feedback loop uses existing tables (decisions + audit_log), no separate feedback store

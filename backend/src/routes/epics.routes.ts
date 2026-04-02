@@ -195,6 +195,12 @@ router.post('/:id/reject',
             [story.meeting_id, story.id, stories_rejection_rationale || rationale, req.user!.id]
           );
         }
+      } else {
+        // Default: unassign stories from rejected epic (set epic_id to null)
+        await query(
+          `UPDATE stories SET epic_id = NULL WHERE epic_id = $1`,
+          [epicId]
+        );
       }
 
       res.json({ message: 'Epic rejected', epicId });

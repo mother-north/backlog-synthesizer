@@ -322,7 +322,8 @@ async def generate_memo(meeting_id: int, body: MemoRequest):
                 feature_tags=r.get("feature_tags") or [],
                 confidence=Confidence(r.get("confidence", "medium")),
                 source_citation=r.get("source_citation", ""),
-                epic_id=r.get("epic_id"),
+                speaker=r.get("speaker", ""),
+                epic_id=str(r["epic_id"]) if r.get("epic_id") else None,
                 grounding_status=GroundingStatus(r["grounding_status"]) if r.get("grounding_status") else None,
             ))
         except Exception:

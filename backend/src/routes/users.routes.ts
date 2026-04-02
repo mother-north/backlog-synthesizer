@@ -129,6 +129,31 @@ router.put('/:id',
   }
 );
 
+// Reset password (admin)
+router.put('/:id/password',
+  body('password').isLength({ min: 6 }),
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const existing = await query('SELECT id FROM users WHERE id = $1', [req.params.id]);
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const passwordHash = await hashPassword(req.body.password);
+      await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, req.params.id]);
+      res.json({ message: 'Password reset' });
+    } catch (error) {
+      logger.error('Reset password error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  }
+);
+
 // Delete user
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {

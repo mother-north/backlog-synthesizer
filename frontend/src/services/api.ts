@@ -101,16 +101,16 @@ export const meetingsApi = {
   upload: (title: string, file?: File, transcript?: string) => {
     const form = new FormData();
     form.append('title', title);
-    if (file) form.append('file', file);
-    if (transcript) form.append('transcript', transcript);
+    if (file) form.append('transcript', file);
+    if (transcript) form.append('pasteText', transcript);
     return api.post('/meetings/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
   trigger: (id: number) => api.post(`/meetings/${id}/trigger`),
   reevaluate: (id: number) => api.post(`/meetings/${id}/reevaluate`),
+  remove: (id: number) => api.delete(`/meetings/${id}`),
   getProgress: (id: number) => api.get(`/meetings/${id}/progress`),
-  delete: (id: number) => api.delete(`/meetings/${id}`),
 };
 
 // --- Stories ---
@@ -133,7 +133,7 @@ export const checksApi = {
     api.get('/checks', { params: { meeting_id: meetingId, ...params } }),
   getByStory: (storyId: number) => api.get(`/stories/${storyId}/checks`),
   resolve: (id: number, data: { resolution: string; notes?: string }) =>
-    api.post(`/checks/${id}/resolve`, data),
+    api.post(`/checks/${id}/resolve`, { resolution_type: data.resolution, resolution_notes: data.notes }),
   getActions: () => api.get('/checks/actions'),
   getActionCount: () => api.get('/checks/actions/count'),
 };

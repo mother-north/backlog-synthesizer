@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import {
   FileTextOutlined,
   UnorderedListOutlined,
-  BellOutlined,
+  AppstoreOutlined,
   DashboardOutlined,
   SearchOutlined,
   DatabaseOutlined,
@@ -12,6 +12,7 @@ import {
   TeamOutlined,
   SafetyCertificateOutlined,
   LockOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { createElement } from 'react';
 
@@ -45,24 +46,18 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   },
   {
     key: '/stories',
-    label: 'All Stories',
+    label: 'Stories',
     icon: createElement(UnorderedListOutlined),
   },
   {
-    key: '/actions',
-    label: 'Action List',
-    icon: createElement(BellOutlined),
-    badge: true,
+    key: '/epics',
+    label: 'Epics',
+    icon: createElement(AppstoreOutlined),
   },
   {
     key: '/dashboard',
     label: 'Dashboard',
     icon: createElement(DashboardOutlined),
-  },
-  {
-    key: '/kb',
-    label: 'Knowledge Base',
-    icon: createElement(SearchOutlined),
   },
   {
     key: 'data',
@@ -71,6 +66,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     children: [
       { key: '/data/backlog', label: 'Backlog Data', icon: createElement(CloudUploadOutlined) },
       { key: '/data/architecture', label: 'Architecture Doc', icon: createElement(FileMarkdownOutlined) },
+      { key: '/kb', label: 'Knowledge Base', icon: createElement(SearchOutlined) },
     ],
   },
   {
@@ -78,6 +74,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     label: 'Settings',
     icon: createElement(SettingOutlined),
     children: [
+      { key: '/settings/profile', label: 'User Profile', icon: createElement(UserOutlined) },
       { key: '/settings/users', label: 'Users', icon: createElement(TeamOutlined) },
       { key: '/settings/roles', label: 'Roles', icon: createElement(SafetyCertificateOutlined) },
       { key: '/settings/access', label: 'Access Control', icon: createElement(LockOutlined) },

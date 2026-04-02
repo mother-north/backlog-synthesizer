@@ -23,24 +23,34 @@ logger = logging.getLogger(__name__)
 
 MEMO_SYSTEM = """You are a decision memo generation agent. Generate a comprehensive decision memo reflecting the current state of a meeting's backlog synthesis.
 
-The memo should include:
-1. **Summary** — brief overview of the meeting outcome
-2. **Confirmed Stories** — stories confirmed by human review, grouped by epic
-3. **Rejected Stories** — stories rejected with rationale
-4. **Pending Stories** — stories still under review
-5. **Epic Proposals** — new epics proposed, their status
-6. **Open Items** — unresolved questions, pending decisions, assigned owners
-7. **Conflicts Resolved** — how conflicts/overlaps were resolved
-8. **Meeting Quality** — quality feedback (ambiguity ratio, actionability)
+The memo MUST include these sections in order:
+
+1. **Meeting Summary** — What was this meeting about? Summarize the main topics discussed, key participants, and the overall purpose. 2-3 sentences.
+
+2. **Key Decisions & Outcomes** — What was decided? Highlight the most important outcomes.
+
+3. **Confirmed Stories** (count) — Stories confirmed by human review, grouped by epic. For each: title, type, who raised it (speaker). Show as a bulleted list.
+
+4. **Rejected Stories** (count) — Stories rejected with rationale for each rejection.
+
+5. **In Progress** (count) — Stories still under review, with any open checks or blockers noted.
+
+6. **Epic Proposals** — New epics proposed, their status (approved/pending).
+
+7. **Open Items & Risks** — Unresolved questions, pending decisions, blockers, assigned owners.
+
+8. **Meeting Quality** — Actionability score, ambiguity ratio, recommendation.
+
+Format the full_text as clean markdown with proper headings (##), bullet points, bold for story titles, and counts in section headings.
 
 Output JSON:
 {
   "title": "Decision Memo: [meeting title]",
-  "summary": "brief overview paragraph",
+  "summary": "2-3 sentence overview of meeting topic and outcomes",
   "sections": [
     {"heading": "section heading", "content": "section text"}
   ],
-  "full_text": "complete memo as formatted text (markdown)"
+  "full_text": "complete memo as formatted markdown"
 }
 
 Return ONLY valid JSON.
@@ -63,33 +73,37 @@ def _get_client() -> OpenAI:
 )
 def _call_memo_llm(
     stories: list[CandidateStory],
+    story_statuses: dict[int, str],
     review_decisions: list[ReviewDecision],
     epic_proposals: list[EpicProposal],
     meeting_quality: MeetingQuality | None,
     meeting_title: str,
 ) -> dict:
     """Call GPT-4o to generate memo."""
-    # Categorise stories by decision
+    # Categorise stories by DB status (primary) or review_decisions (fallback)
     confirmed, rejected, pending = [], [], []
     decision_map = {d.story_title.lower(): d for d in review_decisions}
 
     for s in stories:
+        db_status = story_statuses.get(s.id, "generated") if s.id else "generated"
         dec = decision_map.get(s.title.lower())
         entry = {
             "title": s.title,
             "type": s.type.value,
             "epic": s.epic_id or s.proposed_epic or "unmapped",
+            "speaker": s.speaker or "Unknown",
             "source_citation": s.source_citation[:200],
             "checks_count": len(s.checks),
             "grounding_status": s.grounding_status.value if s.grounding_status else "unknown",
         }
-        if dec and dec.decision == "confirmed":
-            entry["rationale"] = dec.rationale or ""
+        if db_status in ("confirmed", "ready_to_push") or (dec and dec.decision == "confirmed"):
+            entry["rationale"] = dec.rationale if dec else ""
             confirmed.append(entry)
-        elif dec and dec.decision == "rejected":
-            entry["rationale"] = dec.rationale or ""
+        elif db_status == "rejected" or (dec and dec.decision == "rejected"):
+            entry["rationale"] = dec.rationale if dec else ""
             rejected.append(entry)
         else:
+            entry["status"] = db_status
             pending.append(entry)
 
     user_content = f"""Meeting: {meeting_title}
@@ -159,9 +173,20 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
     except Exception:
         meeting_title = f"Meeting {meeting_id}"
 
+    # Get current story statuses from DB
+    story_statuses: dict[int, str] = {}
+    try:
+        from tools.db import execute_query
+        status_rows = execute_query(
+            "SELECT id, status FROM stories WHERE meeting_id = %s", (meeting_id,)
+        )
+        story_statuses = {r["id"]: r["status"] for r in status_rows}
+    except Exception:
+        pass
+
     try:
         llm_result = _call_memo_llm(
-            candidate_stories, review_decisions, epic_proposals,
+            candidate_stories, story_statuses, review_decisions, epic_proposals,
             meeting_quality, meeting_title,
         )
         data = json.loads(llm_result["content"])
@@ -170,14 +195,23 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
         decision_map = {d.story_title.lower(): d for d in review_decisions}
         confirmed_entries, rejected_entries, pending_entries = [], [], []
         for s in candidate_stories:
+            db_status = story_statuses.get(s.id, "generated") if s.id else "generated"
             dec = decision_map.get(s.title.lower())
+            if db_status in ("confirmed", "ready_to_push"):
+                status = "confirmed"
+            elif db_status == "rejected":
+                status = "rejected"
+            elif dec and dec.decision == "confirmed":
+                status = "confirmed"
+            elif dec and dec.decision == "rejected":
+                status = "rejected"
+            else:
+                status = "pending"
             entry = MemoStoryEntry(
                 title=s.title,
                 type=s.type.value,
                 epic=s.epic_id or s.proposed_epic or "unmapped",
-                status="confirmed" if dec and dec.decision == "confirmed"
-                       else "rejected" if dec and dec.decision == "rejected"
-                       else "pending",
+                status=status,
                 rationale=dec.rationale if dec else None,
             )
             if entry.status == "confirmed":
@@ -321,7 +355,7 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
     # Update meeting status
     try:
         execute_write(
-            "UPDATE meetings SET status = 'completed' WHERE id = %s",
+            "UPDATE meetings SET status = 'in_review' WHERE id = %s",
             (meeting_id,),
         )
     except Exception:

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Radio, Input, Button, Space, App } from 'antd';
 import { checksApi } from '../services/api';
-import ConfirmDialog from './ConfirmDialog';
 
 interface Check {
   id: number;
@@ -22,13 +21,12 @@ export default function CheckPanel({ check, onClose, onResolved }: CheckPanelPro
   const [resolution, setResolution] = useState<'accept' | 'override' | 'dismiss'>('accept');
   const [overrideText, setOverrideText] = useState('');
   const [saving, setSaving] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const { message } = App.useApp();
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const notes = resolution === 'override' ? overrideText : resolution === 'dismiss' ? 'Dismissed - not an issue' : 'Accepted proposed resolution';
+      const notes = resolution === 'override' ? overrideText : resolution === 'dismiss' ? 'Dismissed' : 'Accepted';
       await checksApi.resolve(check.id, { resolution, notes });
       message.success('Check resolved');
       onResolved();
@@ -40,36 +38,22 @@ export default function CheckPanel({ check, onClose, onResolved }: CheckPanelPro
   };
 
   return (
-    <div className="bs-check-panel">
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
-          Check: {check.check_type} - "{check.details}"
-        </div>
-        {check.proposed_resolution && (
-          <div style={{ fontSize: 13, color: 'var(--text-sec)', marginBottom: 8 }}>
-            <strong>Proposed:</strong> {check.proposed_resolution}
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 12, color: 'var(--text-sec)', display: 'block', marginBottom: 8 }}>Resolution</label>
-        <Radio.Group value={resolution} onChange={e => setResolution(e.target.value)}>
-          <Space direction="vertical">
-            <Radio value="accept">Accept proposed resolution</Radio>
-            <Radio value="override">Override with custom resolution</Radio>
-            <Radio value="dismiss">Dismiss (not an issue)</Radio>
-          </Space>
-        </Radio.Group>
-      </div>
+    <div style={{ padding: '8px 0' }}>
+      <Radio.Group value={resolution} onChange={e => setResolution(e.target.value)} style={{ marginBottom: 10 }}>
+        <Space orientation="vertical">
+          <Radio value="accept">Accept proposed resolution</Radio>
+          <Radio value="override">Override with custom resolution</Radio>
+          <Radio value="dismiss">Dismiss (not an issue)</Radio>
+        </Space>
+      </Radio.Group>
 
       {resolution === 'override' && (
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 10 }}>
           <Input.TextArea
             value={overrideText}
             onChange={e => setOverrideText(e.target.value)}
             placeholder="Enter your resolution..."
-            rows={3}
+            rows={2}
           />
         </div>
       )}
@@ -77,23 +61,15 @@ export default function CheckPanel({ check, onClose, onResolved }: CheckPanelPro
       <Space>
         <Button
           type="primary"
-          onClick={() => setShowConfirm(true)}
+          size="small"
+          onClick={handleSave}
           loading={saving}
           disabled={resolution === 'override' && !overrideText.trim()}
         >
-          Save Resolution
+          Save
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button size="small" onClick={onClose}>Cancel</Button>
       </Space>
-
-      <ConfirmDialog
-        open={showConfirm}
-        title="Save Resolution"
-        message="Save this resolution?"
-        onConfirm={() => { setShowConfirm(false); handleSave(); }}
-        onCancel={() => setShowConfirm(false)}
-        confirmText="Save"
-      />
     </div>
   );
 }

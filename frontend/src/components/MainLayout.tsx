@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Dropdown, Badge } from 'antd';
+import { Dropdown } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuthStore } from '../store/auth';
-import { menuAccessApi, accessLogApi, checksApi } from '../services/api';
+import { menuAccessApi, accessLogApi } from '../services/api';
 import { ALL_NAV_ITEMS, NavItem, getMenuAccessItems } from '../config/navConfig';
 
 function filterNavItems(items: NavItem[], allowedPaths: Set<string>): NavItem[] {
@@ -28,7 +28,6 @@ export default function MainLayout() {
   );
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   const [allowedPaths, setAllowedPaths] = useState<Set<string> | null>(null);
-  const [actionCount, setActionCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, menuVersion } = useAuthStore();
@@ -59,18 +58,6 @@ export default function MainLayout() {
     }).catch(() => setAllowedPaths(null));
   }, [user, menuVersion]);
 
-  // Fetch action count for badge
-  useEffect(() => {
-    checksApi.getActionCount().then(res => {
-      setActionCount(res.data.count || 0);
-    }).catch(() => {});
-    const interval = setInterval(() => {
-      checksApi.getActionCount().then(res => {
-        setActionCount(res.data.count || 0);
-      }).catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [user]);
 
   const navItems = allowedPaths === null
     ? ALL_NAV_ITEMS
@@ -110,6 +97,11 @@ export default function MainLayout() {
   const isActive = (key: string) => location.pathname === key || location.pathname.startsWith(key + '/');
 
   const userMenuItems = [
+    {
+      key: 'profile',
+      label: 'User Profile',
+      onClick: () => navigate('/settings/profile'),
+    },
     { type: 'divider' as const },
     {
       key: 'logout',
@@ -175,9 +167,6 @@ export default function MainLayout() {
                     >
                       <span className="nav-icon">{item.icon}</span>
                       <span style={{ flex: 1 }}>{item.label}</span>
-                      {item.badge && actionCount > 0 && (
-                        <Badge count={actionCount} size="small" />
-                      )}
                     </div>
                   ) : (
                     <>

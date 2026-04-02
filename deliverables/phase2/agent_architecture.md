@@ -5,7 +5,7 @@
 ### Agent Pipeline (Python)
 | Component | Technology | Purpose |
 |---|---|---|
-| Orchestration | LangGraph | Agent pipeline, state management, checkpointing, human-in-the-loop |
+| Orchestration | LangGraph | Agent pipeline, state management |
 | LLM | OpenAI (GPT-4o) | All agent reasoning and generation |
 | Embeddings | OpenAI text-embedding-3-small | Vector embeddings for KB search |
 | API | FastAPI | REST API serving the agent pipeline to the frontend |
@@ -24,7 +24,7 @@
 ### Single Database
 | Component | Technology | Purpose |
 |---|---|---|
-| Database | PostgreSQL + pgvector | Everything: structured data, vector embeddings, audit log, checkpoints |
+| Database | PostgreSQL + pgvector | Everything: structured data, vector embeddings, audit log |
 
 **Why single DB:** One connection, one backup strategy, one migration path. pgvector handles embedding search alongside relational queries. No need for a separate vector store.
 
@@ -75,7 +75,7 @@ backlog-synthesizer/
 │   │   │   ├── Login.tsx
 │   │   │   ├── meetings/
 │   │   │   │   └── MeetingView.tsx   # Per-meeting: stories, checks, memo, audit — all tabs
-│   │   │   ├── ActionList.tsx        # Per-role action queue
+│   │   │   ├── ActivityLog.tsx       # Activity log (in Settings)
 │   │   │   ├── StoryList.tsx         # All stories, filter/sort
 │   │   │   ├── Dashboard.tsx         # Key metrics
 │   │   │   ├── KnowledgeBase.tsx     # KB browser
@@ -175,48 +175,33 @@ graph.add_node("parser", parser_agent)
 graph.add_node("retriever", retrieval_agent)
 graph.add_node("crossref", crossref_agent)
 graph.add_node("synthesizer", synthesis_agent)
-graph.add_node("validator", validation_agent)       # NEW: grounding check
-graph.add_node("human_review", human_review_node)
-graph.add_node("memo", memo_agent)
+graph.add_node("validator", validation_agent)       # grounding check
 
-# Edges
+# Edges — linear pipeline, no checkpoint/pause
 graph.add_edge("parser", "retriever")
 graph.add_edge("retriever", "crossref")
 graph.add_edge("crossref", "synthesizer")
 graph.add_edge("synthesizer", "validator")           # validate before presenting
-graph.add_edge("validator", "human_review")
-
-# Conditional: after human review
-graph.add_conditional_edges(
-    "human_review",
-    route_after_review,
-    {
-        "recheck": "crossref",    # Story was edited → re-run checks
-        "memo": "memo",           # All done → generate memo
-        "wait": "human_review",   # Still pending → wait
-    }
-)
-graph.add_edge("memo", END)
+graph.add_edge("validator", END)
 
 # Entry point
 graph.set_entry_point("parser")
 
-pipeline = graph.compile(checkpointer=PostgresSaver())
+pipeline = graph.compile()
 ```
 
-### Human-in-the-Loop
+**Note:** Memo generation is on-demand via a separate `/pipeline/memo` endpoint, not a pipeline node.
 
-LangGraph's checkpointing allows the pipeline to **pause** at the `human_review` node and **resume** when the user submits decisions via the UI:
+### Human Review
 
-1. Pipeline runs agents 1-4 + validator, produces candidate stories
-2. Pipeline checkpoints at `human_review` — state saved to PostgreSQL
+After the pipeline completes (Validator → END), results are saved to the database. The user reviews stories in the UI at their own pace:
+
+1. Pipeline runs Parser → Retriever → CrossRef → Synthesizer → Validator → END
+2. Results (stories, checks, epics) are written to PostgreSQL
 3. UI shows stories to user (could be hours/days later)
-4. User resolves checks, edits stories, confirms/rejects
-5. UI calls API with review decisions
-6. Pipeline resumes from checkpoint:
-   - If any story was edited → route to `crossref` (re-check + re-validate)
-   - If all done → route to `memo`
-   - If still pending → stay at `human_review`
+4. User resolves checks, edits stories, confirms/rejects — all saved to DB
+5. Edits save to DB but do not trigger pipeline re-run
+6. Memo generation is triggered on demand via separate endpoint
 
 ### Story Status Transitions (enforced by backend)
 
@@ -247,27 +232,9 @@ Ready to Push
 
 **Note:** `Confirmed → Ready to Push` happens automatically when all stories in a meeting are either Confirmed or Rejected and the decision memo has been generated. This signals the meeting is fully processed.
 
-### Edit Re-Run Flow
+### Story Edits
 
-```
-User edits story in UI
-       ↓
-API receives edit
-       ↓
-Update pipeline state (edited story)
-       ↓
-Resume from checkpoint → route to "crossref"
-       ↓
-Cross-Reference re-checks edited story only
-       ↓
-Synthesis updates checks, detects drift from source
-       ↓
-Validator re-checks grounding on edited story
-       ↓
-Back to human_review checkpoint
-       ↓
-UI shows updated checks + drift warning if applicable
-```
+Story edits made in the UI are saved directly to the database. Edits do not trigger a pipeline re-run — the user reviews and manages stories manually. Drift from the original AI-generated content can be detected by comparing `stories.original_content` with the current story fields.
 
 ## Agent Definitions
 
@@ -286,6 +253,7 @@ For each requirement:
 - Extract priority signals (urgency cues, deadlines)
 - Flag ambiguities with specific questions
 - Assign confidence: high | medium | low
+- Extract speaker attribution per requirement
 
 Output as structured JSON.
 IMPORTANT: Only extract what is explicitly stated or clearly implied 
@@ -368,40 +336,20 @@ Triggered on demand. Generates versioned memo reflecting current state. Writes a
 
 ## Pipeline Progress Reporting
 
-The UI shows a progress bar during pipeline processing. This requires real-time progress from FastAPI to Express to the frontend.
+The UI shows a progress bar during pipeline processing.
 
-### Mechanism: Server-Sent Events (SSE)
+### Mechanism: DB Polling
 
 ```
-Frontend ←── SSE (EventSource) ←── Express ←── SSE ←── FastAPI
+Frontend ──(poll every 3s)──► Express ──► PostgreSQL (meetings.pipeline_progress)
+FastAPI agents ──(write after each node)──► PostgreSQL (meetings.pipeline_progress)
 ```
 
-1. Frontend opens SSE connection: `GET /api/meetings/:id/progress`
-2. Express proxies to FastAPI: `GET /pipeline/:meeting_id/progress`
-3. Each LangGraph node emits a progress event on completion:
+1. Each LangGraph node writes its progress to `meetings.pipeline_progress` (JSONB column) on completion
+2. Frontend polls `GET /api/meetings/:id` every 3 seconds to read updated progress
+3. Progress is rendered as a step-by-step progress bar with human-readable messages
 
-```python
-# In each agent node:
-async def parser_agent(state, config):
-    progress_callback = config.get("progress_callback")
-    progress_callback({
-        "agent": "parser",
-        "status": "running",
-        "message": "Extracting requirements from transcript..."
-    })
-    
-    # ... do work ...
-    
-    progress_callback({
-        "agent": "parser", 
-        "status": "done",
-        "message": "Extracted 9 requirements",
-        "details": {"requirement_count": 9}
-    })
-    return state
-```
-
-4. Progress events stored in `meetings.pipeline_progress` (JSONB) for reconnection:
+Progress data stored in `meetings.pipeline_progress`:
 
 ```json
 [
@@ -441,12 +389,12 @@ async def call_llm(prompt, model="gpt-4o"):
 | LLM rate limit | Retry with exponential backoff (3 attempts) | Delayed, transparent |
 | LLM timeout | Retry, then mark agent output as partial | Warning in UI |
 | LLM returns invalid JSON | Re-prompt with error context (1 retry) | Transparent |
-| Pipeline crash mid-run | Checkpoint saved — resume from last completed node | User re-triggers, no data loss |
+| Pipeline crash mid-run | Meeting status set to error, partial results saved to DB | User re-triggers pipeline |
 | Embedding generation fails | Retry, then skip KB search for that requirement | Warning: "limited context" |
 | Database connection lost | Retry with backoff, then halt pipeline | Error message in UI |
 
 ### Error State in Pipeline
-Errors are accumulated in `PipelineState.errors` and surfaced in the UI. Non-fatal errors (partial results, skipped KB search) produce warnings. Fatal errors halt the pipeline at a checkpoint.
+Errors are accumulated in `PipelineState.errors` and surfaced in the UI. Non-fatal errors (partial results, skipped KB search) produce warnings. Fatal errors halt the pipeline and set meeting status to error.
 
 ## Audit Trail
 
@@ -620,7 +568,7 @@ CREATE TABLE meetings (
     file_name VARCHAR(255),
     status VARCHAR(50) DEFAULT 'processing',  -- processing | in_review | completed
     meeting_quality JSONB,
-    pipeline_progress JSONB,           -- SSE progress events for UI
+    pipeline_progress JSONB,           -- progress events for UI (polled every 3s)
     uploaded_by INTEGER REFERENCES users(id),
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -693,6 +641,7 @@ CREATE TABLE stories (
     feature_tags JSONB,
     priority_signals JSONB,
     confidence VARCHAR(10),
+    speaker VARCHAR(200),
     source_citation TEXT,
     status VARCHAR(50) DEFAULT 'generated',  -- generated | under_review | pending_decision | awaiting_confirmation | confirmed | rejected | ready_to_push
     original_content JSONB,            -- AI-generated version (drift detection)
@@ -830,21 +779,20 @@ const theme = {
 
 ### Sidebar Menu Structure
 ```
-Meetings (main)
-├── Action List         (/actions)          # Per-role pending items
-├── All Stories         (/stories)          # All stories, filter/sort
-└── Dashboard           (/dashboard)        # Key metrics
+Meetings                (/meetings)         # Meeting list + per-meeting view
+All Stories             (/stories)          # All stories, filter/sort
+Dashboard               (/dashboard)        # Key metrics
+Knowledge Base          (/kb)               # Search prior meetings, decisions
 
 Data
 ├── Backlog Data        (/data/backlog)     # Upload/manage backlog JSON
 └── Architecture Doc    (/data/architecture)# Upload/manage architecture doc
 
-Knowledge Base          (/kb)               # Search prior meetings, decisions
-
 Settings
 ├── Users               (/settings/users)
 ├── Roles               (/settings/roles)
-└── Access Control      (/settings/access)  # RBAC menu rules
+├── Access Control      (/settings/access)  # RBAC menu rules
+└── Activity Log        (/settings/activity)# Activity log
 ```
 
 ### Page Definitions
@@ -853,7 +801,6 @@ Settings
 |---|---|---|
 | Login | `/login` | Email/password, JWT auth |
 | **Meeting View** | `/meetings/:id` | **Central hub — all meeting-related content accessible via tabs** |
-| Action List | `/actions` | Pending items for user's roles, sorted by date |
 | All Stories | `/stories` | Filter/sort all stories across all meetings |
 | Dashboard | `/dashboard` | Generated/confirmed/rejected counts, review times, pending by role |
 | Backlog Data | `/data/backlog` | Upload backlog JSON, view/edit items, replace data |
@@ -862,6 +809,7 @@ Settings
 | Users | `/settings/users` | User CRUD |
 | Roles | `/settings/roles` | Role CRUD |
 | Access Control | `/settings/access` | RBAC menu rules per role |
+| Activity Log | `/settings/activity` | Activity log |
 
 ### Meeting View — Central Hub
 
@@ -996,7 +944,7 @@ Frontend (React) → Backend (Express) → Agents (FastAPI/Python)
 | Multi-agent framework | LangGraph with 5 agents + validator |
 | Agents handle task decomposition, planning, tool invocation | Parser decomposes, Synthesis plans, all agents use tools |
 | Context/memory engine persists across stages | pgvector KB + PostgreSQL structured data |
-| Memory persists across document parsing, gap detection, story writing | LangGraph state + PostgreSQL checkpoints |
+| Memory persists across document parsing, gap detection, story writing | LangGraph in-memory state + PostgreSQL tables |
 | Modular tool abstractions | `agents/tools/` — transcript, architecture, backlog, kb readers |
 | Error handling and retry logic | Node-level retry (tenacity), failure mode table, error state in pipeline |
 | Audit logs show how conclusions were reached | 3-level tracing: agent traces + entity audit + decision trail |
@@ -1008,7 +956,7 @@ Frontend (React) → Backend (Express) → Agents (FastAPI/Python)
 | Confidence levels on all outputs | confidence field on stories, grounding_status from validator |
 | Feedback loop (corrections improve future) | Decisions + audit_log searched by retriever, included in context |
 | Backlog hygiene flags | backlog_hygiene_flags table |
-| Drift detection on story edit | original_content JSONB, re-run crossref+validator on edit |
+| Drift detection on story edit | original_content JSONB, compare with current fields |
 | Role-based action list | Checks routed_to field, UI queries by user roles |
 | Meeting quality feedback | meeting_quality JSONB on meetings table |
 | UI for review workflow | 10 pages mapped to all system concept requirements |
@@ -1021,16 +969,16 @@ Frontend (React) → Backend (Express) → Agents (FastAPI/Python)
 
 Prompt: "Compare LangGraph vs CrewAI vs Custom for our 5-agent pipeline with human-in-the-loop, audit trails, and edit re-runs."
 
-Decision: LangGraph — graph-based orchestration maps to our conditional flow (edit → re-check), checkpointing enables human-in-the-loop pause/resume, built-in tracing for audit.
+Decision: LangGraph — graph-based orchestration maps to our linear pipeline flow, built-in tracing for audit.
 
 **Session 2.1 — Architecture Design (AI Build)**
 
 Key decisions:
 - Python agents (FastAPI) separate from TypeScript UI (Express)
-- LangGraph StateGraph with PostgresSaver for checkpoint persistence
+- LangGraph StateGraph with in-memory state (no checkpointing)
 - Monorepo pattern: backend/ + frontend/ + agents/
 - OpenAI GPT-4o for all agents
-- Edit re-run via conditional edges in LangGraph graph
+- Linear pipeline (no edit re-run loop); edits saved to DB only
 - Meeting View as central hub — memo, audit, stories all as tabs
 - Data loading pages for backlog JSON and architecture doc upload
 - Deployment to Azure App Service at https://backlog-synthesizer.azurewebsites.net
@@ -1047,6 +995,6 @@ Cross-checked against initial_task.md + system concept. 6 gaps found and fixed:
 1. **PostgreSQL only** — removed ChromaDB, using pgvector for embeddings in single DB
 2. **Error handling & retry** — added node-level retry with tenacity, failure mode table
 3. **Audit trail detail** — added 3-level tracing: agent traces table, entity audit log, decision trail
-4. **Grounding validation** — added Validator agent between Synthesis and human_review
+4. **Grounding validation** — added Validator agent after Synthesis
 5. **Feedback loop** — retriever searches decisions + audit_log for prior corrections
 6. **Backlog hygiene storage** — added backlog_hygiene_flags table

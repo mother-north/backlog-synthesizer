@@ -18,7 +18,7 @@ from models.story import (
     Actionability,
 )
 from tools.backlog import PgBacklogSource
-from tools.db import execute_write
+from tools.db import execute_write, execute_query_one
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +30,16 @@ Your tasks:
 1. **Generate candidate stories** for each requirement:
    - title, description, acceptance_criteria (testable), feature_tags, type, confidence
    - source_citation (copied from the requirement — exact transcript quote)
+   - speaker (copied from the requirement — who said it, or "Unknown")
    - priority_signals (copied from requirement)
 
-2. **Map to epics** (IMPORTANT — prefer existing epics):
+2. **Map to epics** (CRITICAL — EVERY story must be mapped):
    - You MUST map each story to an existing epic from the list provided. Set epic_id to the existing epic's external_id (e.g., "ERIS-001").
-   - Use broad matching: a story about "risk scoring" maps to "Risk Assessment Engine" (ERIS-001), a story about "review queue" maps to "Review Queue" (ERIS-002), etc.
-   - ONLY propose a new epic if the story truly doesn't fit ANY existing epic. This should be rare.
+   - Use broad matching: a story about "risk scoring" maps to "Risk Assessment Engine", "review queue filtering" maps to "Review Queue", "dashboard" or "metrics" maps to the closest feature area, "notifications" maps to the feature that triggers them, etc.
+   - ONLY propose a new epic if the story truly doesn't fit ANY existing epic. This should be very rare.
    - If proposing a new epic, set proposed_epic to the name and epic_id to null.
-   - Every story MUST have either epic_id or proposed_epic set — never leave both empty.
+   - NEVER leave both epic_id and proposed_epic empty. Every single story MUST have one or the other.
+   - Double-check: if you have a story with no epic_id and no proposed_epic, go back and assign it.
 
 3. **Attach checks** from cross-reference to relevant stories.
 
@@ -58,8 +60,10 @@ Output JSON:
       "acceptance_criteria": ["string"],
       "feature_tags": ["string"],
       "priority_signals": [{"signal": "string", "urgency": "string"}],
+      "priority": "critical|high|medium|low or null if unclear",
       "confidence": "high|medium|low",
       "source_citation": "exact quote from transcript",
+      "speaker": "Name (Role) or Unknown",
       "epic_id": "ERIS-xxx or null",
       "proposed_epic": "New Epic Name or null",
       "questions": [{"question": "string", "routed_to": "PM|Architect|Dev Lead", "context": "string"}]
@@ -175,7 +179,9 @@ def _parse_stories(data: dict, checks: list[Check]) -> list[CandidateStory]:
                     PrioritySignal(**ps) for ps in (s.get("priority_signals") or [])
                 ],
                 confidence=Confidence(s.get("confidence", "medium")),
+                priority=s.get("priority") or None,
                 source_citation=s.get("source_citation", ""),
+                speaker=s.get("speaker", "Unknown"),
                 epic_id=s.get("epic_id"),
                 proposed_epic=s.get("proposed_epic"),
                 questions=[
@@ -261,8 +267,20 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
 
     start = time.time()
 
-    # Load existing epics from epics table
+    # Get meeting info for epic proposals
     from tools.db import execute_query
+    meeting_info = ""
+    try:
+        row = execute_query_one("SELECT title, created_at FROM meetings WHERE id = %s", (meeting_id,))
+        if row:
+            date_str = str(row["created_at"])[:10] if row.get("created_at") else "N/A"
+            meeting_info = f"Auto-proposed: Meeting ID:{meeting_id}, Date: {date_str}, {row['title']}"
+        else:
+            meeting_info = f"Auto-proposed: Meeting ID:{meeting_id}"
+    except Exception:
+        meeting_info = f"Auto-proposed: Meeting ID:{meeting_id}"
+
+    # Load existing epics from epics table
     try:
         epic_rows = execute_query(
             "SELECT id, external_id, title, description FROM epics WHERE is_proposed = false ORDER BY id"
@@ -360,7 +378,7 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
                         new_epic_id = execute_write(
                             """INSERT INTO epics (external_id, title, status, is_proposed, proposed_by_meeting, proposal_justification)
                                VALUES (%s, %s, 'proposed', true, %s, %s) RETURNING id""",
-                            (new_ext_id, proposed_epic_name, meeting_id, f"Auto-proposed: no existing epic matches"),
+                            (new_ext_id, proposed_epic_name, meeting_id, meeting_info),
                         )
                         resolved_epic_id = new_epic_id
                         epic_id_lookup[prop_key] = new_epic_id
@@ -372,9 +390,9 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
                 """
                 INSERT INTO stories
                     (meeting_id, epic_id, title, description, type, acceptance_criteria,
-                     feature_tags, priority_signals, confidence, source_citation,
+                     feature_tags, priority_signals, priority, confidence, source_citation, speaker,
                      status, original_content)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'generated', %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'generated', %s)
                 RETURNING id
                 """,
                 (
@@ -383,7 +401,7 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
                     json.dumps(story.acceptance_criteria),
                     json.dumps(story.feature_tags),
                     json.dumps([ps.model_dump() for ps in story.priority_signals]),
-                    story.confidence.value, story.source_citation,
+                    story.priority, story.confidence.value, story.source_citation, story.speaker,
                     json.dumps(story.model_dump(exclude={"checks", "questions"}), default=str),
                 ),
             )
@@ -411,9 +429,12 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
         except Exception as se:
             logger.warning("Failed to write story to DB: %s", se)
 
-    # Write epic proposals to DB
+    # Write epic proposals to DB (skip if already created per-story)
     for ep in epic_proposals:
         try:
+            existing = execute_query("SELECT id FROM epics WHERE lower(title) = %s", (ep.title.lower().strip(),))
+            if existing:
+                continue
             execute_write(
                 """
                 INSERT INTO epics

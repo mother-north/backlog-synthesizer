@@ -36,10 +36,13 @@ router.get('/', async (req, res) => {
 
     const result = await query(
       `SELECT s.*, m.title as meeting_title, e.title as epic_title, e.external_id as epic_external_id,
-              (SELECT COUNT(*) FROM checks c WHERE c.story_id = s.id AND c.status = 'open') as open_checks
+              COALESCE(oc.cnt, 0) as open_checks
        FROM stories s
        LEFT JOIN meetings m ON m.id = s.meeting_id
        LEFT JOIN epics e ON e.id = s.epic_id
+       LEFT JOIN (
+         SELECT story_id, COUNT(*) as cnt FROM checks WHERE status = 'open' GROUP BY story_id
+       ) oc ON oc.story_id = s.id
        ${whereClause}
        ORDER BY s.created_at DESC`,
       params
@@ -87,6 +90,7 @@ router.put('/:id',
   body('acceptance_criteria').optional(),
   body('epic_id').optional({ nullable: true }),
   body('priority_signals').optional(),
+  body('priority').optional({ nullable: true }).isString(),
   body('feature_tags').optional(),
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -104,7 +108,7 @@ router.put('/:id',
       }
       const currentStory = currentResult.rows[0];
 
-      const { title, description, type, acceptance_criteria, epic_id, priority_signals, feature_tags } = req.body;
+      const { title, description, type, acceptance_criteria, epic_id, priority_signals, priority, feature_tags } = req.body;
 
       const updates: string[] = [];
       const params: any[] = [];
@@ -116,6 +120,7 @@ router.put('/:id',
       if (acceptance_criteria !== undefined) { updates.push(`acceptance_criteria = $${paramIdx++}`); params.push(JSON.stringify(acceptance_criteria)); }
       if (epic_id !== undefined) { updates.push(`epic_id = $${paramIdx++}`); params.push(epic_id); }
       if (priority_signals !== undefined) { updates.push(`priority_signals = $${paramIdx++}`); params.push(JSON.stringify(priority_signals)); }
+      if (priority !== undefined) { updates.push(`priority = $${paramIdx++}`); params.push(priority); }
       if (feature_tags !== undefined) { updates.push(`feature_tags = $${paramIdx++}`); params.push(JSON.stringify(feature_tags)); }
 
       if (updates.length === 0) {

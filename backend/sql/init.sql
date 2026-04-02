@@ -137,8 +137,10 @@ CREATE TABLE IF NOT EXISTS stories (
     acceptance_criteria JSONB,
     feature_tags JSONB,
     priority_signals JSONB,
+    priority VARCHAR(20),
     confidence VARCHAR(10),
     source_citation TEXT,
+    speaker VARCHAR(200),
     status VARCHAR(50) DEFAULT 'generated',
     original_content JSONB,
     grounding_status VARCHAR(20),      -- valid | warning | invalid
@@ -265,4 +267,8 @@ CREATE INDEX IF NOT EXISTS idx_checks_status ON checks(status);
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_agent_traces_meeting ON agent_traces(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_decisions_meeting ON decisions(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_stories_meeting_status ON stories(meeting_id, status);
+CREATE INDEX IF NOT EXISTS idx_checks_story_status ON checks(story_id, status);
+CREATE INDEX IF NOT EXISTS idx_meetings_created ON meetings(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
 CREATE INDEX IF NOT EXISTS idx_backlog_items_external ON backlog_items(external_id);

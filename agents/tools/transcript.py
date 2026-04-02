@@ -17,7 +17,7 @@ class TranscriptResult:
     title: str
     raw_text: str
     word_count: int
-    is_empty: bool  # True if < 10 actionable words
+    is_empty: bool  # True if < 3 words
 
 
 class TranscriptReader:
@@ -44,5 +44,5 @@ class TranscriptReader:
             title=row["title"] or f"Meeting {meeting_id}",
             raw_text=raw,
             word_count=len(words),
-            is_empty=len(words) < 10,
+            is_empty=len(words) < 3,
         )

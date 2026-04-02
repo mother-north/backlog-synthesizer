@@ -12,13 +12,13 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         FRONTEND (React SPA)                                │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐         │
-│  │ Meetings │ │ Stories  │ │ Actions  │ │Dashboard │ │ Settings │         │
-│  │ View     │ │ List     │ │ List     │ │          │ │          │         │
+│  │ Meetings │ │ Stories  │ │Dashboard │ │ KB       │ │ Data     │         │
+│  │          │ │          │ │          │ │ Browser  │ │ Loading  │         │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘         │
-│  ┌──────────┐ ┌──────────┐                                                 │
-│  │ KB       │ │ Data     │  Ant Design + Zustand + React Router            │
-│  │ Browser  │ │ Loading  │  Blue theme (#0033A0)                           │
-│  └──────────┘ └──────────┘                                                 │
+│  ┌──────────┐                                                              │
+│  │ Settings │  Ant Design + Zustand + React Router                         │
+│  │          │  Blue theme (#0033A0)                                         │
+│  └──────────┘                                                              │
 │                              │ Axios (JWT auth)                             │
 └──────────────────────────────┼──────────────────────────────────────────────┘
                                ▼
@@ -58,15 +58,11 @@
 │  │                                            │  Validator  │        │     │
 │  │                                            └──────┬──────┘        │     │
 │  │                                                   │                │     │
-│  │                                    ┌──────────────▼──────────┐    │     │
-│  │                                    │   human_review          │    │     │
-│  │                                    │   (checkpoint — pause)  │    │     │
-│  │                                    └──┬──────────┬───────────┘    │     │
-│  │                              edit ↙   │          │ done           │     │
-│  │                     back to CrossRef  │   ┌──────▼──────┐        │     │
-│  │                                       │   │    Memo     │        │     │
-│  │                                       │   └─────────────┘        │     │
-│  └───────────────────────────────────────┼──────────────────────────┘     │
+│  │                                                  END               │     │
+│  │                                                                    │     │
+│  │  Memo: on-demand via separate /pipeline/memo endpoint              │     │
+│  │                                                                    │     │
+│  └────────────────────────────────────────────────────────────────────┘     │
 │                                          │                                │
 │  ┌────────────────────┐  ┌───────────────▼──────────────────┐            │
 │  │   Tool Interfaces  │  │         OpenAI API               │            │
@@ -96,7 +92,7 @@
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Audit Layer                                                        │   │
-│  │  agent_traces │ audit_log │ checkpoints (LangGraph)                 │   │
+│  │  agent_traces │ audit_log                                           │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Raw Layer                                                          │   │
@@ -155,14 +151,14 @@
                     │  GPT-4o            │
                     └─────────┬─────────┘
                               │ validated stories
-                    ┌─────────▼─────────┐
-                    │  HUMAN REVIEW      │
-                    │  (checkpoint)      │──── edit ──→ back to CROSS-REF
-                    │  UI: resolve,      │
-                    │  confirm, reject   │
-                    └─────────┬─────────┘
-                              │ on demand
-                    ┌─────────▼─────────┐
+                              ▼
+                             END
+                    (results saved to DB,
+                     user reviews in UI)
+
+                    Memo: on-demand via
+                    separate endpoint
+                    ┌───────────────────┐
                     │  6. MEMO           │
                     │  Decision memo     │
                     │  Store in KB       │
@@ -305,12 +301,12 @@ Validating the architecture handles all key use cases:
 
 | Use Case | Path Through Architecture |
 |---|---|
-| UC-1: Clean meeting | UI upload → Express → FastAPI → Parser → Retriever (pgvector) → CrossRef (backlog tool) → Synthesis → Validator → UI → confirm → Memo → KB |
+| UC-1: Clean meeting | UI upload → Express → FastAPI → Parser → Retriever (pgvector) → CrossRef (backlog tool) → Synthesis → Validator → END → UI review → confirm → Memo (on demand) → KB |
 | UC-3: Backlog conflict | CrossRef reads backlog via IBacklogSource → detects conflict → check stored in PG → UI shows check → user resolves |
 | UC-4: Prior decision conflict | Retriever searches kb_embeddings (decisions) → CrossRef flags contradiction → check routed to PM |
 | UC-6: New epic proposal | Synthesis proposes epic → stored in epics table (is_proposed=true) → UI shows proposal → PM approves/rejects |
 | UC-8: Overlap/duplicate | Retriever finds similar backlog items → CrossRef flags overlap with confidence → UI shows match |
-| UC-12: Edit re-run | UI edit → Express → FastAPI resume checkpoint → CrossRef re-runs → Validator re-runs → updated checks in UI |
+| UC-12: Story edit | UI edit → Express → saved to DB (no pipeline re-run) → UI shows updated story |
 | UC-13: Memo on demand | UI request → Express → FastAPI → Memo agent → generates memo → stores in memos table → UI displays |
 | EC-1: Empty transcript | Parser returns 0 requirements → pipeline completes → UI shows empty meeting |
 | Feedback loop | User rejects story → decision stored in PG → next meeting: Retriever finds it via search_feedback() → included in context |
@@ -328,6 +324,6 @@ Key decisions:
 - Four diagrams: system overview (layers), agent pipeline (flow), data flow (read/write paths), deployment (Azure infra)
 - Single database shown with 4 layers: structured, vector, audit, raw
 - Tool interfaces shown as abstraction between agents and database
-- Human review checkpoint explicitly shown in pipeline flow
-- Edit re-run loop visible in both overview and pipeline diagrams
+- Pipeline ends at Validator → END; memo is on-demand via separate endpoint
+- No edit re-run loop; edits save to DB only
 - Use case trace table validates architecture handles all scenarios

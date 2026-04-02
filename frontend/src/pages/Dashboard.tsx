@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Row, Col, Skeleton, Empty, App } from 'antd';
 import {
   FileTextOutlined,
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const [charts, setCharts] = useState<Charts | null>(null);
   const [loading, setLoading] = useState(true);
   const { message } = App.useApp();
+  const navigate = useNavigate();
 
   useEffect(() => {
     setLoading(true);
@@ -79,13 +81,18 @@ export default function Dashboard() {
       <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-sec)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Meetings</div>
       <Row gutter={16} style={{ marginBottom: 24 }}>
         {[
-          { label: 'Total', value: Number(stats.meetings?.total) || 0, icon: <FileTextOutlined />, color: 'var(--primary)' },
-          { label: 'Processing', value: Number(stats.meetings?.processing) || 0, icon: <ClockCircleOutlined />, color: 'var(--accent)' },
-          { label: 'In Review', value: Number(stats.meetings?.in_review) || 0, icon: <WarningOutlined />, color: 'var(--warning)' },
-          { label: 'Completed', value: Number(stats.meetings?.completed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)' },
+          { label: 'Total', value: Number(stats.meetings?.total) || 0, icon: <FileTextOutlined />, color: 'var(--primary)', view: 'all' },
+          { label: 'In Review', value: Number(stats.meetings?.in_review) || 0, icon: <WarningOutlined />, color: 'var(--warning)', view: 'in_review' },
+          { label: 'Completed', value: Number(stats.meetings?.completed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)', view: 'all' },
+          { label: 'Processing', value: Number(stats.meetings?.processing) || 0, icon: <ClockCircleOutlined />, color: 'var(--accent)', view: 'in_review' },
         ].map(card => (
-          <Col span={6} key={card.label}>
-            <div className="bs-stat-card">
+          <Col span={3} key={card.label}>
+            <div className="bs-stat-card" style={{ cursor: 'pointer' }}
+              onClick={() => {
+                localStorage.setItem('meetings_view', card.view);
+                navigate('/meetings');
+              }}
+            >
               <div style={{ color: card.color, marginBottom: 4 }}>{card.icon}</div>
               <div className="stat-value" style={{ color: card.color }}>{card.value}</div>
               <div className="stat-label">{card.label}</div>
@@ -98,14 +105,15 @@ export default function Dashboard() {
       <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-sec)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stories</div>
       <Row gutter={16} style={{ marginBottom: 24 }}>
         {[
-          { label: 'Generated', value: Number(stats.stories?.total) || 0, icon: <UnorderedListOutlined />, color: 'var(--gray-600)' },
-          { label: 'Confirmed', value: Number(stats.stories?.confirmed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)' },
-          { label: 'Rejected', value: Number(stats.stories?.rejected) || 0, icon: <CloseCircleOutlined />, color: 'var(--error)' },
-          { label: 'Pending', value: Number(stats.stories?.total || 0) - Number(stats.stories?.confirmed || 0) - Number(stats.stories?.rejected || 0), icon: <ClockCircleOutlined />, color: 'var(--warning)' },
-          { label: 'Avg Review (days)', value: stats.stories?.avg_review_days ? Number(stats.stories.avg_review_days).toFixed(1) : '-', icon: <ClockCircleOutlined />, color: 'var(--accent)' },
+          { label: 'Total', value: Number(stats.stories?.total) || 0, icon: <UnorderedListOutlined />, color: 'var(--gray-600)', status: '' },
+          { label: 'In Review', value: Number(stats.stories?.total || 0) - Number(stats.stories?.confirmed || 0) - Number(stats.stories?.rejected || 0), icon: <WarningOutlined />, color: 'var(--warning)', status: 'generated' },
+          { label: 'Confirmed', value: Number(stats.stories?.confirmed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)', status: 'confirmed' },
+          { label: 'Rejected', value: Number(stats.stories?.rejected) || 0, icon: <CloseCircleOutlined />, color: 'var(--error)', status: 'rejected' },
         ].map(card => (
-          <Col span={4} key={card.label} style={{ marginBottom: 8 }}>
-            <div className="bs-stat-card">
+          <Col span={3} key={card.label}>
+            <div className="bs-stat-card" style={{ cursor: 'pointer' }}
+              onClick={() => navigate(card.status ? `/stories?status=${card.status}` : '/stories')}
+            >
               <div style={{ color: card.color, marginBottom: 4 }}>{card.icon}</div>
               <div className="stat-value" style={{ color: card.color }}>{card.value}</div>
               <div className="stat-label">{card.label}</div>

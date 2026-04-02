@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Tabs, Button, Tag, Skeleton, Table, Select, Input, Timeline, App, Empty, Checkbox, Modal, Descriptions } from 'antd';
+import { Tabs, Button, Tag, Skeleton, Table, Input, Timeline, App, Empty, Checkbox, Modal, Tooltip, Radio } from 'antd';
 import {
   ArrowLeftOutlined,
   ReloadOutlined,
+  DeleteOutlined,
   WarningOutlined,
   SearchOutlined,
   EyeOutlined,
@@ -11,12 +12,12 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi, dataApi } from '../services/api';
+import { marked } from 'marked';
+import { meetingsApi, storiesApi, checksApi, epicsApi, memosApi, auditApi } from '../services/api';
 import { statusColors } from '../theme';
 import { useAuthStore } from '../store/auth';
 import StoryCard from '../components/StoryCard';
 // EpicProposal moved to Epics tab
-import CheckPanel from '../components/CheckPanel';
 // PipelineProgress replaced with inline ProcessingStatus
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -37,8 +38,10 @@ interface Epic {
   title: string;
   external_id?: string;
   is_proposed?: boolean;
+  proposed_by_meeting?: number;
   proposal_justification?: string;
   story_count?: number;
+  status?: string;
 }
 
 interface Story {
@@ -52,6 +55,8 @@ interface Story {
   grounding_issues?: string[];
   acceptance_criteria: string[];
   source_citation: string;
+  speaker: string;
+  priority?: string | null;
   epic_id: number | null;
   epic?: Epic;
   checks: Array<{
@@ -72,6 +77,7 @@ interface Check {
   proposed_resolution: string;
   routed_to: string;
   status: string;
+  resolution_notes?: string;
   story_title?: string;
   story_id?: number;
 }
@@ -90,6 +96,7 @@ interface AgentTrace {
   duration_ms: number;
   llm_prompt_tokens: number;
   llm_completion_tokens: number;
+  created_at: string;
 }
 
 interface AuditEntry {
@@ -173,8 +180,6 @@ export default function MeetingView() {
   const { message } = App.useApp();
   const { user } = useAuthStore();
   const userRoles = user?.roles || [];
-  const isAdmin = userRoles.includes('Admin');
-  const canResolve = (routedTo: string) => isAdmin || userRoles.includes(routedTo);
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
@@ -193,24 +198,29 @@ export default function MeetingView() {
     setActiveTab(tab);
     window.history.replaceState(null, '', `#${tab}`);
   };
-  const [expandedStory, setExpandedStory] = useState<number | null>(null);
+  const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
   // collapsedEpics removed — stories now in table
-
-  // Checks tab filters
-  const [checkStatusFilter, setCheckStatusFilter] = useState<string>('all');
-  const [checkRoleFilter, setCheckRoleFilter] = useState<string>('all');
-  const [resolvingCheckId, setResolvingCheckId] = useState<number | null>(null);
 
   // Memo
   const [generatingMemo, setGeneratingMemo] = useState(false);
   const [showMemoConfirm, setShowMemoConfirm] = useState(false);
 
+  // Story reject dialog
+  const [showStoryReject, setShowStoryReject] = useState(false);
+  // Trace JSON preview
+  const [viewTraceJson, setViewTraceJson] = useState<AgentTrace | null>(null);
+
+  // Meeting actions
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showReevaluateConfirm, setShowReevaluateConfirm] = useState(false);
+
   // Bulk confirm
   const [selectedStories, setSelectedStories] = useState<number[]>([]);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
-  // Transcript search
+  // Transcript search & citation highlights
   const [transcriptSearch, setTranscriptSearch] = useState('');
+  const [showStoryCitations, setShowStoryCitations] = useState(true);
 
   // Listen for "View in transcript" from StoryCard
   useEffect(() => {
@@ -299,6 +309,70 @@ export default function MeetingView() {
     checks: checks.filter(c => c.story_id === story.id),
   }));
 
+  // Citation ranges — computed once when stories or transcript change (positions only)
+  const citationRanges = useMemo(() => {
+    if (!meeting?.transcript || stories.length === 0) return [];
+    const transcript = meeting.transcript;
+
+    // Build normalized transcript with position mapping back to original
+    const normMap: number[] = []; // normMap[normIdx] = originalIdx
+    let normChars: string[] = [];
+    let i = 0;
+    while (i < transcript.length) {
+      // Skip ** (markdown bold)
+      if (transcript[i] === '*' && transcript[i + 1] === '*') { i += 2; continue; }
+      let ch = transcript[i];
+      // Normalize characters
+      if (ch === '\u2014' || ch === '\u2013' || ch === '\u0014') ch = '-';
+      else if (ch === '\u2018' || ch === '\u2019') ch = "'";
+      else if (ch === '\u201C' || ch === '\u201D') ch = '"';
+      normMap.push(i);
+      normChars.push(ch);
+      i++;
+    }
+    const normTranscript = normChars.join('');
+
+    // Normalize citation text (same rules, no position mapping needed)
+    const normCit = (t: string) => t
+      .replace(/\*\*/g, '')
+      .replace(/[\u0014\u2014\u2013]/g, '-')
+      .replace(/[\u2018\u2019\u0060]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"');
+    const stripQuotes = (t: string) => t.replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '').trim();
+
+    const ranges: { start: number; end: number; storyId: number }[] = [];
+    for (const s of stories) {
+      if (!s.source_citation || s.source_citation.length < 10) continue;
+      const clean = normCit(stripQuotes(s.source_citation));
+      let normIdx = -1;
+      for (const len of [80, 40, 25]) {
+        const snippet = clean.slice(0, len).trim();
+        if (!snippet) continue;
+        normIdx = normTranscript.indexOf(snippet);
+        if (normIdx !== -1) break;
+        normIdx = normTranscript.toLowerCase().indexOf(snippet.toLowerCase());
+        if (normIdx !== -1) break;
+      }
+      if (normIdx === -1) continue;
+      // Find end in normalized space
+      const fullNormIdx = normTranscript.indexOf(clean, normIdx);
+      const normEnd = fullNormIdx !== -1 ? fullNormIdx + clean.length : normIdx + Math.min(clean.length, 200);
+      // Map back to original positions
+      const origStart = normMap[normIdx] ?? normIdx;
+      const origEnd = (normMap[Math.min(normEnd, normMap.length - 1)] ?? normEnd) + 1;
+      ranges.push({ start: origStart, end: Math.min(origEnd, transcript.length), storyId: s.id });
+    }
+    // Sort by start, remove overlaps (first match wins)
+    ranges.sort((a, b) => a.start - b.start);
+    const deduped: typeof ranges = [];
+    for (const r of ranges) {
+      if (deduped.length === 0 || r.start >= deduped[deduped.length - 1].end) {
+        deduped.push(r);
+      }
+    }
+    return deduped;
+  }, [meeting?.transcript, stories.map(s => `${s.id}:${s.source_citation?.slice(0, 20)}`).join(',')]);
+
   // storiesByEpic removed — stories now in flat table with Epic column
 
   // proposedEpics/existingEpics — shown in Epics tab
@@ -310,134 +384,10 @@ export default function MeetingView() {
     s.epic_id
   );
 
-  // Checks filtering
-  const filteredChecks = checks.filter(c => {
-    if (checkStatusFilter !== 'all' && c.status !== checkStatusFilter) return false;
-    if (checkRoleFilter === 'mine' && !canResolve(c.routed_to)) return false;
-    if (checkRoleFilter !== 'all' && checkRoleFilter !== 'mine' && c.routed_to !== checkRoleFilter) return false;
-    return true;
-  });
 
-  // Backlog item preview
-  const [viewBacklogItem, setViewBacklogItem] = useState<any>(null);
-
-  const fetchBacklogItem = async (externalId: string) => {
-    try {
-      const res = await dataApi.getBacklog({ search: externalId });
-      const items = res.data?.rows || res.data || [];
-      const match = items.find((i: any) => i.external_id === externalId);
-      if (match) setViewBacklogItem(match);
-      else message.warning(`Backlog item ${externalId} not found`);
-    } catch {
-      message.error('Failed to load backlog item');
-    }
-  };
-
-  // Parse ERIS-XXX references from check details
-  const renderDetailsWithBacklogLinks = (details: string) => {
-    if (!details) return '-';
-    const parts = details.split(/(ERIS-\d+)/g);
-    return (
-      <span>
-        {parts.map((part, i) =>
-          /^ERIS-\d+$/.test(part) ? (
-            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-              <Tag color="blue" style={{ margin: 0, cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  fetchBacklogItem(part);
-                }}>
-                {part} <EyeOutlined style={{ fontSize: 10, marginLeft: 2 }} />
-              </Tag>
-            </span>
-          ) : <span key={i}>{part}</span>
-        )}
-      </span>
-    );
-  };
-
-  const checksColumns: ColumnsType<Check> = [
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 60,
-      sorter: (a, b) => a.id - b.id,
-      render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)' }}>{id}</span>,
-    },
-    {
-      title: 'Type',
-      dataIndex: 'check_type',
-      key: 'check_type',
-      width: 140,
-      filters: Array.from(new Set(checks.map(c => c.check_type))).filter(Boolean).map(v => ({ text: v, value: v })),
-      onFilter: (value, record) => record.check_type === value,
-      render: (type: string) => <Tag>{type}</Tag>,
-    },
-    {
-      title: 'Story',
-      key: 'story',
-      width: 200,
-      ellipsis: true,
-      render: (_: unknown, record: Check) => {
-        const story = stories.find(s => s.id === record.story_id);
-        return story ? (
-          <span style={{ fontSize: 13 }}>{story.title}</span>
-        ) : (
-          <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>Story #{record.story_id}</span>
-        );
-      },
-      filters: Array.from(new Set(checks.map(c => c.story_id))).filter(Boolean).map(sid => {
-        const story = stories.find(s => s.id === sid);
-        return { text: story?.title || `Story #${sid}`, value: sid as number };
-      }),
-      onFilter: (value, record) => record.story_id === value,
-    },
-    {
-      title: 'Details',
-      dataIndex: 'details',
-      key: 'details',
-      ellipsis: true,
-      render: (details: string) => renderDetailsWithBacklogLinks((details || '').slice(0, 120) + ((details || '').length > 120 ? '...' : '')),
-    },
-    {
-      title: 'Role',
-      dataIndex: 'routed_to',
-      key: 'role',
-      width: 100,
-      render: (role: string) => <Tag color="blue">{role}</Tag>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      width: 110,
-      render: (status: string) => (
-        <span className="status-badge" style={{
-          background: `${statusColors[status] || 'var(--gray-400)'}20`,
-          color: statusColors[status] || 'var(--gray-400)',
-        }}>
-          {formatStatus(status)}
-        </span>
-      ),
-    },
-    {
-      title: 'Action',
-      key: 'action',
-      width: 90,
-      render: (_, record) => (
-        record.status === 'open' && canResolve(record.routed_to) ? (
-          <Button size="small" type="primary" onClick={() => setResolvingCheckId(record.id)}>
-            Resolve
-          </Button>
-        ) : record.status === 'open' ? (
-          <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>Not your role</span>
-        ) : null
-      ),
-    },
-  ];
 
   const traceColumns: ColumnsType<AgentTrace> = [
+    { title: 'Date/Time', dataIndex: 'created_at', key: 'date', width: 160, render: (d: string) => d ? new Date(d).toLocaleString() : '—' },
     { title: 'Agent', dataIndex: 'agent_name', key: 'agent', render: (n: string) => <Tag>{n}</Tag> },
     {
       title: 'Output Summary',
@@ -489,7 +439,7 @@ export default function MeetingView() {
         >
           {formatStatus(meeting.status)}
         </Tag>
-        {(meeting.status === 'uploaded') && (
+        {meeting.status === 'uploaded' && (
           <Button
             type="primary"
             onClick={async () => {
@@ -505,22 +455,21 @@ export default function MeetingView() {
             Process Meeting
           </Button>
         )}
-        {meeting.status === 'in_review' && (
+        {meeting.status !== 'processing' && meeting.status !== 'uploaded' && (
           <Button
-            danger
-            onClick={async () => {
-              try {
-                await meetingsApi.reevaluate(meetingId);
-                message.success('Re-evaluation started — all stories and checks cleared');
-                fetchData();
-              } catch {
-                message.error('Failed to start re-evaluation');
-              }
-            }}
+            icon={<ReloadOutlined />}
+            onClick={() => setShowReevaluateConfirm(true)}
           >
             Re-evaluate
           </Button>
         )}
+        <Button
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => setShowDeleteConfirm(true)}
+        >
+          Delete
+        </Button>
       </div>
 
       {/* Pipeline progress — simple polling status */}
@@ -554,7 +503,11 @@ export default function MeetingView() {
                 </div>
 
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Transcript</div>
-                <div style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+                  <Radio.Group value={showStoryCitations ? 'show' : 'hide'} onChange={e => setShowStoryCitations(e.target.value === 'show')} buttonStyle="solid" size="middle">
+                    <Radio.Button value="show">Show Stories</Radio.Button>
+                    <Radio.Button value="hide">Hide Stories</Radio.Button>
+                  </Radio.Group>
                   <Input
                     prefix={<SearchOutlined />}
                     placeholder="Search transcript..."
@@ -583,6 +536,39 @@ export default function MeetingView() {
                           '<mark style="background:#ffd591">$1</mark>'
                         ),
                       }} />
+                    ) : showStoryCitations && citationRanges.length > 0 ? (
+                      (() => {
+                        const t = meeting.transcript;
+                        const parts: React.ReactNode[] = [];
+                        let pos = 0;
+                        for (const range of citationRanges) {
+                          if (range.start > pos) {
+                            parts.push(<span key={`t-${pos}`}>{t.slice(pos, range.start)}</span>);
+                          }
+                          const story = storiesWithChecks.find(s => s.id === range.storyId);
+                          const bg = story?.status === 'confirmed' || story?.status === 'ready_to_push'
+                            ? '#d9f7be' : story?.status === 'rejected' ? '#ffa39e' : '#fff7e6';
+                          const borderColor = story?.status === 'confirmed' || story?.status === 'ready_to_push'
+                            ? '#52c41a' : story?.status === 'rejected' ? '#ff4d4f' : '#faad14';
+                          const citText = t.slice(range.start, range.end);
+                          const lastSpaceIdx = citText.lastIndexOf(' ', citText.length - 1);
+                          const mainText = lastSpaceIdx > 0 ? citText.slice(0, lastSpaceIdx + 1) : citText;
+                          const tailText = lastSpaceIdx > 0 ? citText.slice(lastSpaceIdx + 1) : '';
+                          parts.push(
+                            <mark key={`c-${range.storyId}`} onClick={() => setSelectedStoryId(range.storyId)}
+                              style={{ background: bg, borderRadius: 3, padding: '1px 2px', borderBottom: `2px solid ${borderColor}`, cursor: 'pointer' }}>
+                              {mainText}<span style={{ whiteSpace: 'nowrap' }}>{tailText}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 4, fontSize: 11, fontWeight: 600, color: borderColor, fontStyle: 'normal', verticalAlign: 'middle' }}>
+                                <EyeOutlined /> #{range.storyId}
+                              </span></span>
+                            </mark>
+                          );
+                          pos = range.end;
+                        }
+                        if (pos < t.length) {
+                          parts.push(<span key={`t-${pos}`}>{t.slice(pos)}</span>);
+                        }
+                        return <>{parts}</>;
+                      })()
                     ) : (
                       meeting.transcript
                     )
@@ -595,7 +581,7 @@ export default function MeetingView() {
           },
           {
             key: 'stories',
-            label: `Stories (${stories.length})`,
+            label: `New Stories (${stories.length})`,
             children: (
               <div>
                 {/* Bulk confirm */}
@@ -630,29 +616,18 @@ export default function MeetingView() {
                     rowKey="id"
                     size="middle"
                     pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100], showTotal: (total) => `${total} stories` }}
-                    expandable={{
-                      expandedRowRender: (story) => (
-                        <StoryCard
-                          story={story}
-                          epics={epics}
-                          expanded={true}
-                          onToggle={() => {}}
-                          onUpdate={fetchData}
-                          userRoles={userRoles}
-                          transcript={meeting?.transcript}
-                        />
-                      ),
-                      expandedRowKeys: expandedStory ? [expandedStory] : [],
-                      onExpand: (expanded, record) => setExpandedStory(expanded ? record.id : null),
-                    }}
+                    onRow={(record) => ({
+                      onClick: () => setSelectedStoryId(record.id),
+                      style: { cursor: 'pointer' },
+                    })}
                     columns={[
                       {
                         title: 'ID',
                         dataIndex: 'id',
                         key: 'id',
-                        width: 60,
+                        width: 70,
                         sorter: (a, b) => a.id - b.id,
-                        render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)' }}>{id}</span>,
+                        render: (id: number) => <span style={{ fontFamily: 'monospace', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>{id}</span>,
                       },
                       {
                         title: 'Title',
@@ -672,12 +647,28 @@ export default function MeetingView() {
                         render: (type: string) => <Tag color={type === 'feature' ? 'blue' : type === 'bug' ? 'red' : type === 'nfr' ? 'purple' : type === 'improvement' ? 'green' : 'default'}>{type}</Tag>,
                       },
                       {
+                        title: 'Criticality',
+                        dataIndex: 'priority',
+                        key: 'priority',
+                        width: 100,
+                        filters: [
+                          { text: 'Critical', value: 'critical' },
+                          { text: 'High', value: 'high' },
+                          { text: 'Medium', value: 'medium' },
+                          { text: 'Low', value: 'low' },
+                        ],
+                        onFilter: (value, record) => record.priority === value,
+                        render: (p: string) => <Tag color={p === 'critical' ? 'red' : p === 'high' ? 'orange' : p === 'medium' ? 'blue' : p === 'low' ? 'default' : 'default'}>{p || '—'}</Tag>,
+                      },
+                      {
                         title: 'Epic',
                         key: 'epic',
                         ellipsis: true,
                         filters: [
-                          ...epics.map(e => ({ text: e.title, value: e.id })),
-                          { text: 'No Epic', value: 0 },
+                          ...epics
+                            .filter(e => storiesWithChecks.some(s => s.epic_id === e.id))
+                            .map(e => ({ text: `${e.external_id ? e.external_id + ' ' : ''}${e.title}`, value: e.id })),
+                          ...(storiesWithChecks.some(s => !s.epic_id) ? [{ text: 'No Epic', value: 0 }] : []),
                         ],
                         onFilter: (value, record) => value === 0 ? !record.epic_id : record.epic_id === value,
                         render: (_: unknown, record: any) => {
@@ -736,26 +727,20 @@ export default function MeetingView() {
                   onCancel={() => setShowBulkConfirm(false)}
                   confirmText="Confirm All"
                 />
+
               </div>
             ),
           },
           {
             key: 'epics',
-            label: `Epics (${epics.length})`,
+            label: `New Epics (${epics.filter(e => e.is_proposed && e.proposed_by_meeting === meetingId).length})`,
             children: (
               <div>
-                {epics.length === 0 ? (
-                  <Empty description="No epics found. Upload backlog data to seed epics, or run the pipeline to generate epic proposals." />
+                {epics.filter(e => e.is_proposed && e.proposed_by_meeting === meetingId).length === 0 ? (
+                  <Empty description="No new epics proposed for this meeting" />
                 ) : (
                   <Table
-                    dataSource={[...epics].sort((a, b) => {
-                      // Proposed first, then by story count in this meeting
-                      if (a.is_proposed && !b.is_proposed) return -1;
-                      if (!a.is_proposed && b.is_proposed) return 1;
-                      const aCount = storiesWithChecks.filter(s => s.epic_id === a.id).length;
-                      const bCount = storiesWithChecks.filter(s => s.epic_id === b.id).length;
-                      return bCount - aCount;
-                    })}
+                    dataSource={epics.filter(e => e.is_proposed && e.proposed_by_meeting === meetingId)}
                     rowKey="id"
                     pagination={false}
                     size="middle"
@@ -771,109 +756,27 @@ export default function MeetingView() {
                           )}
                         </div>
                       )},
-                      { title: 'Source', key: 'source', width: 120,
-                        filters: [{ text: 'Backlog', value: 'backlog' }, { text: 'Proposed', value: 'proposed' }],
-                        onFilter: (value: any, record: any) => value === 'proposed' ? record.is_proposed : !record.is_proposed,
-                        render: (_: unknown, record: any) => (
-                        <Tag color={record.is_proposed ? 'orange' : 'green'}>
-                          {record.is_proposed ? 'Proposed' : 'Backlog'}
+                      { title: 'Status', dataIndex: 'status', key: 'status', width: 120,
+                        render: (status: string) => (
+                        <Tag color={status === 'proposed' ? 'orange' : status === 'active' ? 'green' : status === 'rejected' ? 'red' : 'default'}>
+                          {status}
                         </Tag>
                       )},
-                      { title: 'All Stories', dataIndex: 'story_count', key: 'all_stories', width: 100,
-                        sorter: (a: any, b: any) => (a.story_count || 0) - (b.story_count || 0),
-                        render: (v: number) => v || 0 },
-                      { title: 'This Meeting', key: 'meeting_stories', width: 110,
-                        sorter: (a: any, b: any) => {
-                          const aCount = storiesWithChecks.filter(s => s.epic_id === a.id).length;
-                          const bCount = storiesWithChecks.filter(s => s.epic_id === b.id).length;
-                          return aCount - bCount;
-                        },
+                      { title: 'Stories', key: 'meeting_stories', width: 100,
                         render: (_: unknown, record: any) => {
                           const count = storiesWithChecks.filter(s => s.epic_id === record.id).length;
                           return count > 0 ? <Tag color="blue">{count}</Tag> : <span style={{ color: 'var(--gray-400)' }}>0</span>;
                         }},
-                      { title: 'Actions', key: 'actions', width: 180, render: (_: unknown, record: any) => record.is_proposed ? (
+                      { title: 'Actions', key: 'actions', width: 180, render: (_: unknown, record: any) => record.status === 'proposed' ? (
                         <div style={{ display: 'flex', gap: 8 }}>
                           <Button size="small" type="primary" onClick={() => epicsApi.approve(record.id).then(() => { message.success('Epic approved'); fetchData(); })}>Approve</Button>
                           <Button size="small" danger onClick={() => epicsApi.reject(record.id, { action: 'reject', rationale: 'Rejected' }).then(() => { message.success('Epic rejected'); fetchData(); })}>Reject</Button>
                         </div>
                       ) : (
-                        <span style={{ color: 'var(--text-sec)', fontSize: 12 }}>—</span>
+                        <Tag color={record.status === 'active' ? 'success' : 'error'}>{record.status}</Tag>
                       )},
                     ]}
                   />
-                )}
-              </div>
-            ),
-          },
-          {
-            key: 'checks',
-            label: `Checks (${checks.filter((c: any) => c.status === 'open').length} open)`,
-            children: (
-              <div>
-                <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                  <Select
-                    value={checkStatusFilter}
-                    onChange={setCheckStatusFilter}
-                    style={{ width: 150 }}
-                    options={[
-                      { value: 'all', label: 'All Statuses' },
-                      { value: 'open', label: 'Open' },
-                      { value: 'resolved', label: 'Resolved' },
-                      { value: 'dismissed', label: 'Dismissed' },
-                    ]}
-                  />
-                  <Select
-                    value={checkRoleFilter}
-                    onChange={setCheckRoleFilter}
-                    style={{ width: 150 }}
-                    options={[
-                      { value: 'all', label: 'All Roles' },
-                      { value: 'mine', label: 'My Roles' },
-                      ...Array.from(new Set(checks.map(c => c.routed_to))).map(r => ({ value: r, label: r })),
-                    ]}
-                  />
-                </div>
-                {filteredChecks.length === 0 ? (
-                  <Empty description="No checks found - all stories passed validation" />
-                ) : (
-                  <>
-                    <Table
-                      dataSource={filteredChecks}
-                      columns={checksColumns}
-                      rowKey="id"
-                      pagination={{ pageSize: 20, showTotal: (total) => `${total} checks` }}
-                      expandable={{
-                        expandedRowRender: (record) => (
-                          <div style={{ padding: '8px 0' }}>
-                            <div style={{ marginBottom: 12 }}>
-                              <div style={{ fontWeight: 500, marginBottom: 4 }}>Details</div>
-                              <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{renderDetailsWithBacklogLinks(record.details || 'No details')}</div>
-                            </div>
-                            {record.proposed_resolution && (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontWeight: 500, marginBottom: 4 }}>Proposed Resolution</div>
-                                <div style={{ color: 'var(--text-sec)', fontSize: 13 }}>{record.proposed_resolution}</div>
-                              </div>
-                            )}
-                            {resolvingCheckId === record.id ? (
-                              <CheckPanel
-                                check={record}
-                                onClose={() => setResolvingCheckId(null)}
-                                onResolved={() => { setResolvingCheckId(null); fetchData(); }}
-                              />
-                            ) : (
-                              canResolve(record.routed_to) && record.status === 'open' && (
-                                <Button type="primary" size="small" onClick={() => setResolvingCheckId(record.id)}>
-                                  Resolve This Check
-                                </Button>
-                              )
-                            )}
-                          </div>
-                        ),
-                      }}
-                    />
-                  </>
                 )}
               </div>
             ),
@@ -904,28 +807,11 @@ export default function MeetingView() {
                 {memos.length === 0 ? (
                   <Empty description="No memo generated yet. Click Generate to create one." />
                 ) : (
-                  <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
+                  <div className="bs-memo-content" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
                     <div
-                      style={{ lineHeight: 1.8, whiteSpace: 'pre-wrap' }}
-                      dangerouslySetInnerHTML={{ __html: memos[0]?.content?.replace(/\n/g, '<br/>') || '' }}
+                      style={{ lineHeight: 1.8 }}
+                      dangerouslySetInnerHTML={{ __html: marked.parse(memos[0]?.content || '') as string }}
                     />
-                  </div>
-                )}
-
-                {/* Meeting Quality */}
-                {meeting.meeting_quality && (
-                  <div style={{ marginTop: 16, padding: 16, background: 'var(--blue-50)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Meeting Quality</div>
-                    <div style={{ display: 'flex', gap: 24, marginBottom: 8 }}>
-                      <span>Requirements: {meeting.meeting_quality.requirements}</span>
-                      <span>Ambiguous: {meeting.meeting_quality.ambiguous}</span>
-                      <span>Actionability: {meeting.meeting_quality.actionability}</span>
-                    </div>
-                    {meeting.meeting_quality.recommendation && (
-                      <p style={{ fontStyle: 'italic', color: 'var(--gray-600)', margin: 0 }}>
-                        "{meeting.meeting_quality.recommendation}"
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -963,7 +849,19 @@ export default function MeetingView() {
                 ) : (
                   <Table
                     dataSource={traces}
-                    columns={traceColumns}
+                    columns={[
+                      ...traceColumns,
+                      {
+                        title: '',
+                        key: 'json',
+                        width: 80,
+                        render: (_: unknown, record: AgentTrace) => (
+                          <Button size="small" icon={<EyeOutlined />} onClick={() => setViewTraceJson(record)}>
+                            JSON
+                          </Button>
+                        ),
+                      },
+                    ]}
                     rowKey="id"
                     pagination={false}
                     size="small"
@@ -971,7 +869,7 @@ export default function MeetingView() {
                   />
                 )}
 
-                <div style={{ fontWeight: 600, marginBottom: 12 }}>Story History</div>
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>History</div>
                 {auditLog.length === 0 ? (
                   <Empty description="No audit entries" />
                 ) : (
@@ -982,6 +880,7 @@ export default function MeetingView() {
                         <div>
                           <div style={{ fontSize: 12, color: 'var(--text-sec)' }}>
                             {new Date(entry.created_at).toLocaleString()}
+                            {(entry as any).user_email && <span style={{ marginLeft: 8 }}>by <strong>{(entry as any).user_email}</strong></span>}
                           </div>
                           <div>
                             <Tag>{entry.entity_type}</Tag>
@@ -992,50 +891,157 @@ export default function MeetingView() {
                     }))}
                   />
                 )}
+
+                {/* JSON Preview Modal */}
+                <Modal
+                  title={viewTraceJson ? `${viewTraceJson.agent_name} — Output` : ''}
+                  open={!!viewTraceJson}
+                  onCancel={() => setViewTraceJson(null)}
+                  footer={<Button onClick={() => setViewTraceJson(null)}>Close</Button>}
+                  width={600}
+                  destroyOnHidden
+                >
+                  {viewTraceJson && (
+                    <pre style={{ background: 'var(--gray-50)', padding: 16, borderRadius: 8, fontSize: 12, maxHeight: 400, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                      {JSON.stringify(viewTraceJson.output_summary, null, 2)}
+                    </pre>
+                  )}
+                </Modal>
               </div>
             ),
           },
         ]}
       />
 
-      {/* Backlog Item Preview Modal */}
+      {/* Story Detail Modal */}
       <Modal
-        title={viewBacklogItem ? `${viewBacklogItem.external_id}: ${viewBacklogItem.title}` : ''}
-        open={!!viewBacklogItem}
-        onCancel={() => setViewBacklogItem(null)}
-        footer={<Button onClick={() => setViewBacklogItem(null)}>Close</Button>}
-        width={700}
+        title={(() => {
+          const s = storiesWithChecks.find(s => s.id === selectedStoryId);
+          if (!s) return '';
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>{s.title}</span>
+              <Tag color={s.status === 'confirmed' || s.status === 'ready_to_push' ? 'success' : s.status === 'rejected' ? 'error' : s.status === 'processing' ? 'processing' : 'warning'}>
+                {s.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              </Tag>
+            </div>
+          );
+        })()}
+        open={!!selectedStoryId}
+        onCancel={() => setSelectedStoryId(null)}
+        footer={(() => {
+          const story = storiesWithChecks.find(s => s.id === selectedStoryId);
+          if (!story) return <Button onClick={() => setSelectedStoryId(null)}>Close</Button>;
+          const openChecks = story.checks?.filter((c: any) => c.status === 'open').length || 0;
+          const canConfirm = openChecks === 0 && story.epic_id && story.status !== 'confirmed' && story.status !== 'rejected' && story.status !== 'ready_to_push';
+          const canReject = story.status !== 'confirmed' && story.status !== 'rejected' && story.status !== 'ready_to_push';
+          const showActions = canConfirm || canReject;
+          return (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {showActions && (
+                  <>
+                    <Tooltip title={!canConfirm ? (openChecks > 0 ? `${openChecks} open checks` : !story.epic_id ? 'No epic assigned' : '') : ''}>
+                      <Button type="primary" icon={<CheckCircleOutlined />} disabled={!canConfirm}
+                        onClick={() => {
+                          storiesApi.confirm(story.id).then(() => {
+                            message.success(`Story "${story.title}" confirmed`);
+                            fetchData();
+                          }).catch(() => message.error('Failed to confirm'));
+                        }}>
+                        Confirm
+                      </Button>
+                    </Tooltip>
+                    <Button danger disabled={!canReject}
+                      onClick={() => setShowStoryReject(true)}>
+                      Reject
+                    </Button>
+                  </>
+                )}
+              </div>
+              <Button onClick={() => setSelectedStoryId(null)}>Close</Button>
+            </div>
+          );
+        })()}
+        width={800}
         destroyOnHidden
       >
-        {viewBacklogItem && (
-          <Descriptions column={2} bordered size="small" style={{ marginTop: 16 }}>
-            <Descriptions.Item label="ID">{viewBacklogItem.external_id}</Descriptions.Item>
-            <Descriptions.Item label="Type"><Tag color={viewBacklogItem.type === 'epic' ? 'purple' : viewBacklogItem.type === 'bug' ? 'red' : viewBacklogItem.type === 'story' ? 'blue' : 'default'}>{viewBacklogItem.type}</Tag></Descriptions.Item>
-            <Descriptions.Item label="Title" span={2}>{viewBacklogItem.title}</Descriptions.Item>
-            <Descriptions.Item label="Description" span={2}>{viewBacklogItem.description || <span style={{ color: 'var(--gray-400)' }}>No description</span>}</Descriptions.Item>
-            <Descriptions.Item label="Epic">{viewBacklogItem.epic_id || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Status"><Tag>{viewBacklogItem.status}</Tag></Descriptions.Item>
-            <Descriptions.Item label="Priority">{viewBacklogItem.priority ? <Tag color={viewBacklogItem.priority === 'critical' ? 'red' : viewBacklogItem.priority === 'high' ? 'orange' : 'blue'}>{viewBacklogItem.priority}</Tag> : '—'}</Descriptions.Item>
-            <Descriptions.Item label="Labels">
-              {viewBacklogItem.labels && viewBacklogItem.labels.length > 0
-                ? viewBacklogItem.labels.map((l: string) => <Tag key={l} style={{ marginBottom: 2 }}>{l}</Tag>)
-                : '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Acceptance Criteria" span={2}>
-              {viewBacklogItem.acceptance_criteria && viewBacklogItem.acceptance_criteria.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {viewBacklogItem.acceptance_criteria.map((ac: string, i: number) => <li key={i}>{ac}</li>)}
-                </ul>
-              ) : <span style={{ color: 'var(--gray-400)' }}>None</span>}
-            </Descriptions.Item>
-            <Descriptions.Item label="Dependencies" span={2}>
-              {viewBacklogItem.dependencies && viewBacklogItem.dependencies.length > 0
-                ? viewBacklogItem.dependencies.map((d: string) => <Tag key={d} color="blue">{d}</Tag>)
-                : '—'}
-            </Descriptions.Item>
-          </Descriptions>
-        )}
+        {(() => {
+          const story = storiesWithChecks.find(s => s.id === selectedStoryId);
+          return story ? (
+            <StoryCard
+              story={story}
+              epics={epics}
+              expanded={true}
+              onToggle={() => {}}
+              onUpdate={() => { fetchData(); }}
+              userRoles={userRoles}
+              transcript={meeting?.transcript}
+            />
+          ) : null;
+        })()}
+        <ConfirmDialog
+          open={showStoryReject}
+          title="Reject Story"
+          message={`Reject "${storiesWithChecks.find(s => s.id === selectedStoryId)?.title}"?`}
+          onConfirm={(input) => {
+            const story = storiesWithChecks.find(s => s.id === selectedStoryId);
+            if (story && input) {
+              storiesApi.reject(story.id, input).then(() => {
+                message.success(`Story "${story.title}" rejected`);
+                fetchData();
+              }).catch(() => message.error('Failed to reject'));
+            }
+            setShowStoryReject(false);
+          }}
+          onCancel={() => setShowStoryReject(false)}
+          confirmText="Reject Story"
+          danger
+          requireInput
+          inputLabel="Rationale"
+          inputPlaceholder="Why is this story being rejected?"
+        />
       </Modal>
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Meeting"
+        message={`Delete "${meeting.title}" and all associated stories, checks, and memos? This cannot be undone.`}
+        onConfirm={async () => {
+          try {
+            await meetingsApi.remove(meetingId);
+            message.success('Meeting deleted');
+            navigate('/meetings');
+          } catch {
+            message.error('Failed to delete meeting');
+          }
+          setShowDeleteConfirm(false);
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+        confirmText="Delete"
+        danger
+      />
+
+      {/* Re-evaluate Confirm */}
+      <ConfirmDialog
+        open={showReevaluateConfirm}
+        title="Re-evaluate Meeting"
+        message={`Re-evaluate "${meeting.title}"? All existing stories, checks, and memos will be cleared and the pipeline will re-run.`}
+        onConfirm={async () => {
+          try {
+            await meetingsApi.reevaluate(meetingId);
+            message.success('Re-evaluation started');
+            fetchData();
+          } catch {
+            message.error('Failed to start re-evaluation');
+          }
+          setShowReevaluateConfirm(false);
+        }}
+        onCancel={() => setShowReevaluateConfirm(false)}
+        confirmText="Re-evaluate"
+        danger
+      />
     </div>
   );
 }

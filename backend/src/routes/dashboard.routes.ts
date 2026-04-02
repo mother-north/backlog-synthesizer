@@ -6,8 +6,16 @@ import { logger } from '../utils/logger.js';
 const router = Router();
 router.use(authenticateToken);
 
+// Simple in-memory cache (60s TTL)
+let dashboardCache: { data: any; timestamp: number } | null = null;
+const CACHE_TTL = 10_000; // 10 seconds
+
 // Get dashboard metrics
 router.get('/', async (_req, res) => {
+  // Return cached data if fresh
+  if (dashboardCache && Date.now() - dashboardCache.timestamp < CACHE_TTL) {
+    return res.json(dashboardCache.data);
+  }
   try {
     // Meeting counts by status
     const meetingCounts = await query(
@@ -80,7 +88,7 @@ router.get('/', async (_req, res) => {
        LIMIT 20`
     );
 
-    res.json({
+    const responseData = {
       meetings: meetingCounts.rows[0],
       stories: storyCounts.rows[0],
       checksByRole: checksByRole.rows,
@@ -90,7 +98,9 @@ router.get('/', async (_req, res) => {
       storiesByMeeting: storiesByMeeting.rows,
       checkTypes: checkTypes.rows,
       recentActivity: recentActivity.rows,
-    });
+    };
+    dashboardCache = { data: responseData, timestamp: Date.now() };
+    res.json(responseData);
   } catch (error) {
     logger.error('Dashboard metrics error:', error);
     res.status(500).json({ error: 'Failed to get dashboard metrics' });
