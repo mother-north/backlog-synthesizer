@@ -113,10 +113,10 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
         acceptance_criteria: editCriteria.split('\n').filter(c => c.trim()),
         epic_id: editEpicId || undefined,
       });
-      message.info('Story updated - re-checking...');
+      message.success('Story updated');
+      setConfirmDialog(null);
       setEditing(false);
       onUpdate();
-      setTimeout(() => message.success('Re-check complete'), 1500);
     } catch {
       message.error('Failed to update story');
     } finally {
@@ -465,7 +465,7 @@ export default function StoryCard({ story, epics, onUpdate, userRoles, transcrip
           <ConfirmDialog
             open={confirmDialog === 'save'}
             title="Save Changes"
-            message="Save changes? System will re-check for conflicts."
+            message="Save changes to this story?"
             onConfirm={handleSaveEdit}
             onCancel={() => setConfirmDialog(null)}
             confirmText="Save"

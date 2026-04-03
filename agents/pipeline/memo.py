@@ -161,8 +161,8 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "memo", "running", "Generating decision memo...")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     start = time.time()
 
@@ -170,7 +170,7 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
     try:
         row = execute_query_one("SELECT title FROM meetings WHERE id = %s", (meeting_id,))
         meeting_title = row["title"] if row else f"Meeting {meeting_id}"
-    except Exception:
+    except Exception as e:
         meeting_title = f"Meeting {meeting_id}"
 
     # Get current story statuses from DB
@@ -181,8 +181,8 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
             "SELECT id, status FROM stories WHERE meeting_id = %s", (meeting_id,)
         )
         story_statuses = {r["id"]: r["status"] for r in status_rows}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     try:
         llm_result = _call_memo_llm(
@@ -358,14 +358,14 @@ async def memo_agent(state: dict, config: dict | None = None) -> dict:
             "UPDATE meetings SET status = 'in_review' WHERE id = %s",
             (meeting_id,),
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "memo", "done", "Memo generated")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     return {
         "memo": memo,

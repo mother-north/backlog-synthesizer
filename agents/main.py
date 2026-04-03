@@ -46,12 +46,13 @@ logger = logging.getLogger("agents")
 # ---------------------------------------------------------------------------
 app = FastAPI(title="Backlog Synthesizer — Agent Pipeline", version="1.0.0")
 
+_allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:5176,http://localhost:3006").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # In-memory progress event queues per meeting (meeting_id -> asyncio.Queue)
@@ -185,8 +186,8 @@ async def run_pipeline(meeting_id: int):
             "UPDATE meetings SET status = 'processing', pipeline_progress = '[]'::jsonb WHERE id = %s",
             (meeting_id,),
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     # Run pipeline in background
     async def _run():
@@ -198,10 +199,13 @@ async def run_pipeline(meeting_id: int):
             from tools.progress import update_progress
             update_progress(meeting_id, "validator", "error", str(e))
         finally:
-            # Signal end of progress
+            # Signal end of progress and cleanup queue
             q = _progress_queues.get(meeting_id)
             if q:
                 await q.put({"agent": "pipeline", "status": "complete", "message": "Pipeline finished"})
+            # Remove queue after a delay to allow SSE clients to receive final message
+            await asyncio.sleep(30)
+            _progress_queues.pop(meeting_id, None)
 
     asyncio.create_task(_run())
 
@@ -299,8 +303,8 @@ async def generate_memo(meeting_id: int, body: MemoRequest):
     for d in body.review_decisions:
         try:
             decisions.append(ReviewDecision(**d))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
     # Build a minimal state for memo generation
     # Retrieve current stories from DB
@@ -326,8 +330,8 @@ async def generate_memo(meeting_id: int, body: MemoRequest):
                 epic_id=str(r["epic_id"]) if r.get("epic_id") else None,
                 grounding_status=GroundingStatus(r["grounding_status"]) if r.get("grounding_status") else None,
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
     state: dict[str, Any] = {
         "meeting_id": meeting_id,

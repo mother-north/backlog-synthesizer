@@ -33,8 +33,19 @@ async function embedMeeting(meetingId: number, title: string, transcript: string
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// SSE progress endpoint — no auth required (EventSource can't send headers)
+// SSE progress endpoint — auth via query param token (EventSource can't send headers)
 router.get('/:id/progress', async (req, res) => {
+  // Validate token from query param
+  const token = req.query.token as string;
+  if (!token) {
+    return res.status(401).json({ error: 'Token required (pass as ?token=...)' });
+  }
+  try {
+    const jwt = await import('jsonwebtoken');
+    jwt.default.verify(token, config.jwt.accessSecret);
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
   const meetingId = req.params.id;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

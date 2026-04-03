@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { Button, Upload, Skeleton, Empty, App } from 'antd';
 import { UploadOutlined, FileMarkdownOutlined } from '@ant-design/icons';
 import { dataApi } from '../../services/api';
@@ -124,7 +125,7 @@ export default function ArchitectureData() {
             maxHeight: 600,
             overflow: 'auto',
           }}>
-            <div dangerouslySetInnerHTML={{ __html: renderMarkdown(doc.content) }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMarkdown(doc.content)) }} />
           </div>
 
           {/* Version History */}

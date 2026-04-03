@@ -8,6 +8,7 @@
 #   ./scripts/deploy-azure.sh              # interactive prompt for data transfer
 #   ./scripts/deploy-azure.sh --with-data  # always transfer data, no prompt
 #   ./scripts/deploy-azure.sh --code-only  # skip data transfer, no prompt
+#   ./scripts/deploy-azure.sh --deps-only  # just restart to install new npm/pip deps, no code/data deploy
 #
 # Prerequisites:
 #   brew install azure-cli jq
@@ -45,11 +46,40 @@ echo ""
 
 # ─── Parse args ────────────────────────────────────────────────────────────────
 WITH_DATA=false
+DEPS_ONLY=false
 _SKIP_PROMPT=false
 for arg in "$@"; do
   [[ "$arg" == "--with-data" ]] && WITH_DATA=true  && _SKIP_PROMPT=true
   [[ "$arg" == "--code-only" ]] && WITH_DATA=false && _SKIP_PROMPT=true
+  [[ "$arg" == "--deps-only" ]] && DEPS_ONLY=true  && _SKIP_PROMPT=true
 done
+
+if $DEPS_ONLY; then
+  echo -e " ${CYAN}Mode: DEPS ONLY (restart to install new packages)${NC}"
+  echo ""
+
+  # Just restart the app — startup.sh will run npm install + pip install
+  az account set --subscription "$SUBSCRIPTION_ID" 2>/dev/null || { az login; az account set --subscription "$SUBSCRIPTION_ID"; }
+  echo -e "${YELLOW}Restarting app to install dependencies...${NC}"
+  az webapp restart --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --output none
+
+  WEBAPP_URL=$(az webapp show --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --query "defaultHostName" -o tsv 2>/dev/null || echo "${WEBAPP_NAME}.azurewebsites.net")
+
+  echo -e "${YELLOW}Waiting for app to start...${NC}"
+  for i in $(seq 1 20); do
+    sleep 15
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${WEBAPP_URL}/api/health" --max-time 10 2>/dev/null || echo "000")
+    if [[ "$HTTP_STATUS" == "200" ]]; then
+      echo -e "    ${GREEN}✓ App is up (${i}x15s)${NC}"
+      break
+    fi
+    echo -e "    ⏳ Not ready yet (${i}/20)..."
+  done
+
+  echo ""
+  echo -e "${GREEN}Done! App: https://${WEBAPP_URL}${NC}"
+  exit 0
+fi
 
 if [[ "$_SKIP_PROMPT" == "false" ]]; then
   read -r -p " Transfer local PostgreSQL data to server? [y/N] " _ans

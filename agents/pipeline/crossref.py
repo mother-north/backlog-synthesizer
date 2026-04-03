@@ -149,8 +149,8 @@ async def crossref_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "crossref", "running", f"Cross-referencing {len(requirements)} requirements...")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     start = time.time()
     total_prompt = 0
@@ -267,8 +267,8 @@ async def crossref_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "crossref", "done", f"Found {len(all_checks)} checks, {len(all_hygiene)} hygiene flags")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     return {
         "checks": all_checks,

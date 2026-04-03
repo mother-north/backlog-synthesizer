@@ -33,13 +33,20 @@ Your tasks:
    - speaker (copied from the requirement — who said it, or "Unknown")
    - priority_signals (copied from requirement)
 
-2. **Map to epics** (CRITICAL — EVERY story must be mapped):
-   - You MUST map each story to an existing epic from the list provided. Set epic_id to the existing epic's external_id (e.g., "ERIS-001").
-   - Use broad matching: a story about "risk scoring" maps to "Risk Assessment Engine", "review queue filtering" maps to "Review Queue", "dashboard" or "metrics" maps to the closest feature area, "notifications" maps to the feature that triggers them, etc.
-   - ONLY propose a new epic if the story truly doesn't fit ANY existing epic. This should be very rare.
-   - If proposing a new epic, set proposed_epic to the name and epic_id to null.
-   - NEVER leave both epic_id and proposed_epic empty. Every single story MUST have one or the other.
-   - Double-check: if you have a story with no epic_id and no proposed_epic, go back and assign it.
+2. **Map to epics** (CRITICAL — EVERY story MUST have an epic):
+   - Set epic_id to one of the existing epic external_ids from the list (e.g., "ERIS-001").
+   - Match broadly by theme, not exact words:
+     * Risk scoring, evaluation, AI assessment → Risk Assessment Engine
+     * Review queue, approval flow, analyst workflow → Review Queue
+     * Login, auth, roles, passwords, MFA → User Management & Auth
+     * LLM, model, prompt, API integration → LLM Integration
+     * File upload, PDF, DOCX, document parsing → Document Processing
+     * Regulations, compliance rules, library → Regulation Library
+     * Deploy, CI/CD, infra, monitoring, backups → Deployment & DevOps
+     * Performance, scalability, database, caching → pick the closest match above
+   - ONLY propose a new epic if the story truly doesn't fit ANY of the above. This is RARE.
+   - If proposing new epic: set proposed_epic to a name and epic_id to null.
+   - VALIDATION: Before returning, check every story. If any story has both epic_id=null AND proposed_epic=null, fix it immediately.
 
 3. **Attach checks** from cross-reference to relevant stories.
 
@@ -164,7 +171,7 @@ Existing Epics:
     }
 
 
-def _parse_stories(data: dict, checks: list[Check]) -> list[CandidateStory]:
+def _parse_stories(data: dict, checks: list[Check], existing_epics: list[dict] | None = None) -> list[CandidateStory]:
     """Parse LLM output into CandidateStory objects and attach checks."""
     stories: list[CandidateStory] = []
     for s in data.get("stories", []):
@@ -197,7 +204,24 @@ def _parse_stories(data: dict, checks: list[Check]) -> list[CandidateStory]:
             ]
             story.checks = story_checks
 
-            # Auto-create "No Epic" check if unmapped
+            # Auto-assign epic if LLM left it empty — fuzzy match against existing epics
+            if not story.epic_id and not story.proposed_epic and existing_epics:
+                title_lower = story.title.lower()
+                desc_lower = story.description.lower()
+                best_match = None
+                best_score = 0
+                for e in existing_epics:
+                    epic_words = set(e["title"].lower().split())
+                    story_words = set(title_lower.split()) | set(desc_lower.split())
+                    overlap = len(epic_words & story_words)
+                    if overlap > best_score:
+                        best_score = overlap
+                        best_match = e
+                if best_match and best_score >= 1:
+                    story.epic_id = best_match["external_id"]
+                    logger.info("Auto-assigned story '%s' to epic '%s' (score=%d)", story.title, best_match["title"], best_score)
+
+            # Auto-create "No Epic" check if still unmapped
             if not story.epic_id and not story.proposed_epic:
                 story.checks.append(Check(
                     story_title=story.title,
@@ -262,8 +286,8 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "synthesizer", "running", "Generating candidate stories and mapping to epics...")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     start = time.time()
 
@@ -277,7 +301,7 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
             meeting_info = f"Auto-proposed: Meeting ID:{meeting_id}, Date: {date_str}, {row['title']}"
         else:
             meeting_info = f"Auto-proposed: Meeting ID:{meeting_id}"
-    except Exception:
+    except Exception as e:
         meeting_info = f"Auto-proposed: Meeting ID:{meeting_id}"
 
     # Load existing epics from epics table
@@ -318,7 +342,7 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
                 cleaned = llm_result["content"].encode('utf-8', errors='replace').decode('utf-8')
                 data = json.loads(cleaned, strict=False)
 
-        candidate_stories = _parse_stories(data, checks)
+        candidate_stories = _parse_stories(data, checks, existing_epics)
         epic_proposals = _parse_epic_proposals(data)
         meeting_quality = _parse_meeting_quality(data)
 
@@ -366,8 +390,8 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
                         if existing:
                             resolved_epic_id = existing[0]["id"]
                             epic_id_lookup[prop_key] = resolved_epic_id
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Non-critical: %s", e)
                 if not resolved_epic_id and proposed_epic_name:
                     try:
                         # Generate external_id for proposed epic
@@ -486,8 +510,8 @@ async def synthesizer_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "synthesizer", "done", f"Generated {len(candidate_stories)} stories, {len(epic_proposals)} epic proposals")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     return {
         "candidate_stories": candidate_stories,

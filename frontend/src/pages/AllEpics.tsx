@@ -94,7 +94,7 @@ export default function AllEpics() {
       ),
     },
     {
-      title: 'Stories',
+      title: <span style={{ whiteSpace: 'nowrap' }}>Stories</span>,
       dataIndex: 'story_count',
       key: 'stories',
       width: 80,

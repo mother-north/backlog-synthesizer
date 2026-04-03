@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config/env.js';
@@ -23,9 +25,21 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled for SPA
 app.use(cors({ origin: config.clientUrl, credentials: true }));
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
+
+// Rate limiting on auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: config.nodeEnv === 'development' ? 100 : 20, // relaxed in dev for testing
+  message: { error: 'Too many attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
 
 // ── Routes ──────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -76,7 +90,7 @@ app.get('/api/access-log', authenticateToken, async (_req, res) => {
        LIMIT 500`
     );
     res.json({ rows: result.rows, total: result.rowCount });
-  } catch { res.json({ rows: [], total: 0 }); }
+  } catch (err) { logger.error('Access log fetch error:', err); res.json({ rows: [], total: 0 }); }
 });
 app.post('/api/access-log', authenticateToken, async (req: any, res) => {
   try {
@@ -90,7 +104,7 @@ app.post('/api/access-log', authenticateToken, async (req: any, res) => {
       [menu, JSON.stringify({ ip }), req.user?.id]
     );
     res.status(204).end();
-  } catch { res.status(204).end(); }
+  } catch (err) { logger.error('Access log error:', err); res.status(204).end(); }
 });
 app.delete('/api/access-log', authenticateToken, async (_req, res) => {
   try {
@@ -98,11 +112,11 @@ app.delete('/api/access-log', authenticateToken, async (_req, res) => {
       `DELETE FROM audit_log WHERE entity_type = 'access'`
     );
     res.status(204).end();
-  } catch { res.status(204).end(); }
+  } catch (err) { logger.error('Access log error:', err); res.status(204).end(); }
 });
 
 // ── Pipeline proxy (all /api/pipeline/* → FastAPI) ──────────
-app.all('/api/pipeline/*', async (req, res) => {
+app.all('/api/pipeline/*', authenticateToken, async (req, res) => {
   const targetPath = req.originalUrl.replace('/api/pipeline', '');
   const targetUrl = `${config.agentsUrl}/pipeline${targetPath}`;
 
@@ -197,11 +211,23 @@ async function startServer() {
       logger.info('Production mode — agents server managed by startup.sh');
     }
 
-    app.listen(config.port, () => {
+    const server = app.listen(config.port, () => {
       logger.info(`Backlog Synthesizer server running on http://localhost:${config.port}`);
       logger.info(`Environment: ${config.nodeEnv}`);
       logger.info(`Agents URL: ${config.agentsUrl}`);
     });
+
+    // Graceful shutdown
+    const shutdown = () => {
+      logger.info('Shutting down...');
+      server.close(() => {
+        logger.info('Server closed');
+        process.exit(0);
+      });
+      setTimeout(() => process.exit(1), 10000); // force after 10s
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

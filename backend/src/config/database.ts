@@ -8,7 +8,7 @@ const poolConfig = config.database.url
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
-      ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: process.env.PG_SSL === 'true' ? { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
     }
   : {
       host: config.database.host,
@@ -19,7 +19,7 @@ const poolConfig = config.database.url
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
-      ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: process.env.PG_SSL === 'true' ? { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== 'false' } : false,
     };
 
 const pool = new Pool(poolConfig);

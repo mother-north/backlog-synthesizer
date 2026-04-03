@@ -101,8 +101,10 @@ class KnowledgeBase:
         type_filter = ""
         params: dict = {"limit": limit}
         if content_types:
-            placeholders = ", ".join(f"'{ct}'" for ct in content_types)
-            type_filter = f"AND content_type IN ({placeholders})"
+            type_placeholders = ", ".join(f"%(ct_{i})s" for i in range(len(content_types)))
+            type_filter = f"AND content_type IN ({type_placeholders})"
+            for i, ct in enumerate(content_types):
+                params[f"ct_{i}"] = ct
 
         rows = execute_query(
             f"""
@@ -113,7 +115,7 @@ class KnowledgeBase:
             ORDER BY embedding <=> %(vec)s::vector
             LIMIT %(limit)s
             """,
-            {"vec": vec_str, "limit": limit},
+            {**params, "vec": vec_str},
         )
         results = []
         for r in rows:
@@ -144,8 +146,10 @@ class KnowledgeBase:
             conditions.append("(" + " OR ".join(kw_clauses) + ")")
 
         if meeting_ids:
-            placeholders = ", ".join(str(int(m)) for m in meeting_ids)
-            conditions.append(f"d.meeting_id IN ({placeholders})")
+            mid_placeholders = ", ".join(f"%(mid_{i})s" for i in range(len(meeting_ids)))
+            conditions.append(f"d.meeting_id IN ({mid_placeholders})")
+            for i, m in enumerate(meeting_ids):
+                params[f"mid_{i}"] = int(m)
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
 

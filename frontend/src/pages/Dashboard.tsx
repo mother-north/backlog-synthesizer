@@ -83,12 +83,13 @@ export default function Dashboard() {
         {[
           { label: 'Total', value: Number(stats.meetings?.total) || 0, icon: <FileTextOutlined />, color: 'var(--primary)', view: 'all' },
           { label: 'In Review', value: Number(stats.meetings?.in_review) || 0, icon: <WarningOutlined />, color: 'var(--warning)', view: 'in_review' },
-          { label: 'Completed', value: Number(stats.meetings?.completed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)', view: 'all' },
+          { label: 'Completed', value: Number(stats.meetings?.completed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)', view: 'completed' },
           { label: 'Processing', value: Number(stats.meetings?.processing) || 0, icon: <ClockCircleOutlined />, color: 'var(--accent)', view: 'in_review' },
         ].map(card => (
           <Col span={3} key={card.label}>
-            <div className="bs-stat-card" style={{ cursor: 'pointer' }}
+            <div className="bs-stat-card" style={card.value ? { cursor: 'pointer' } : undefined}
               onClick={() => {
+                if (!card.value) return;
                 localStorage.setItem('meetings_view', card.view);
                 navigate('/meetings');
               }}
@@ -105,14 +106,18 @@ export default function Dashboard() {
       <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-sec)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stories</div>
       <Row gutter={16} style={{ marginBottom: 24 }}>
         {[
-          { label: 'Total', value: Number(stats.stories?.total) || 0, icon: <UnorderedListOutlined />, color: 'var(--gray-600)', status: '' },
-          { label: 'In Review', value: Number(stats.stories?.total || 0) - Number(stats.stories?.confirmed || 0) - Number(stats.stories?.rejected || 0), icon: <WarningOutlined />, color: 'var(--warning)', status: 'generated' },
-          { label: 'Confirmed', value: Number(stats.stories?.confirmed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)', status: 'confirmed' },
-          { label: 'Rejected', value: Number(stats.stories?.rejected) || 0, icon: <CloseCircleOutlined />, color: 'var(--error)', status: 'rejected' },
+          { label: 'Total', value: Number(stats.stories?.total) || 0, icon: <UnorderedListOutlined />, color: 'var(--gray-600)', storiesView: 'all' },
+          { label: 'In Review', value: Number(stats.stories?.total || 0) - Number(stats.stories?.confirmed || 0) - Number(stats.stories?.rejected || 0), icon: <WarningOutlined />, color: 'var(--warning)', storiesView: 'pending' },
+          { label: 'Confirmed', value: Number(stats.stories?.confirmed) || 0, icon: <CheckCircleOutlined />, color: 'var(--success)', storiesView: 'processed' },
+          { label: 'Rejected', value: Number(stats.stories?.rejected) || 0, icon: <CloseCircleOutlined />, color: 'var(--error)', storiesView: 'processed' },
         ].map(card => (
           <Col span={3} key={card.label}>
-            <div className="bs-stat-card" style={{ cursor: 'pointer' }}
-              onClick={() => navigate(card.status ? `/stories?status=${card.status}` : '/stories')}
+            <div className="bs-stat-card" style={card.value ? { cursor: 'pointer' } : undefined}
+              onClick={() => {
+                if (!card.value) return;
+                localStorage.setItem('stories_view', card.storiesView);
+                navigate('/stories');
+              }}
             >
               <div style={{ color: card.color, marginBottom: 4 }}>{card.icon}</div>
               <div className="stat-value" style={{ color: card.color }}>{card.value}</div>

@@ -20,51 +20,63 @@ from tools.db import execute_write
 
 logger = logging.getLogger(__name__)
 
-PARSER_SYSTEM = """You are a requirements extraction agent. Extract ALL actionable requirements from the meeting transcript. Be THOROUGH — missing a real requirement is worse than extracting a borderline one.
+PARSER_SYSTEM = """You are a requirements extraction agent. Your job is to read a meeting transcript and extract EVERY actionable requirement discussed.
 
-WHAT TO EXTRACT:
-- Bug reports and fixes ("the bug where...", "fix the issue with...")
-- New feature requests ("we need...", "we should add...", "I think we need...")
-- Improvements and UX suggestions ("we should show...", "it would be better if...", "the UX should...", "explain variability in...")
-- Non-functional requirements (performance, security, scalability)
-- Tech debt items ("we should refactor...", "we need to clean up...")
-- Agreements that add a new action ("I think X is right — we should..." means extract the action after "we should")
-- Anything phrased as a suggestion for change, even if embedded in a longer discussion
-- Items mentioned in passing if they describe a desired system behavior that doesn't exist yet
+## EXTRACTION PROCESS
+1. Read the ENTIRE transcript from start to finish
+2. For each speaker turn, ask: "Is this person requesting, suggesting, or agreeing to build/fix/change something?"
+3. If yes → extract it as a requirement
+4. One distinct ask = one requirement. If someone lists 3 things, extract 3 separate requirements.
+5. After your first pass, re-scan the transcript to check you haven't missed anything.
 
-WHAT NOT TO EXTRACT:
-- Pure status updates on existing work already tracked in the backlog ("ERIS-048 is in progress") — UNLESS a new action is proposed on top
-- Completed work ("we shipped X last week")
-- Opinions with no actionable outcome ("I don't like how it looks" with no proposed fix)
-- Meeting logistics ("let's take a break")
+## WHAT COUNTS AS A REQUIREMENT:
+- Direct requests: "we need X", "let's build X", "add X"
+- Bug reports: "there's a bug where...", "X is broken"
+- Suggestions: "we should X", "it would be good to X", "I think we need X"
+- Agreements that add scope: "I agree, and we should also X"
+- NFRs: "must handle N users", "response time under X seconds", "need to support X"
+- Tech debt: "we should refactor X", "let's clean up X", "document X"
+- Decisions that imply work: "let's go with X" (means: implement X)
+- Constraints to implement: "it must work on Y", "needs to support Z format"
 
-For each requirement:
-- Quote the exact source text as source_citation (verbatim from transcript — the exact sentence(s) where the requirement is stated)
-- CRITICAL — Identify the speaker who stated or proposed the requirement
-- Classify type: feature | bug | improvement | tech_debt | nfr
-- Classify granularity: epic | story | task
-- Assign priority: critical | high | medium | low (based on urgency cues, deadlines, explicit statements, or implied importance)
-- Extract priority signals (urgency cues, deadlines, explicit priority statements)
-- Flag ambiguities with specific questions
-- Assign confidence: high | medium | low
+## WHAT IS NOT A REQUIREMENT:
+- Status updates with no new action: "we shipped X last week", "X is in progress"
+- Pure opinions with no action: "I don't like it" (unless followed by "we should change it to...")
+- Questions that don't resolve to an action in the same conversation
+- Meeting logistics: "let's take a break"
 
-Output JSON:
+## FOR EACH REQUIREMENT, PROVIDE:
+- description: Clear summary of what needs to be done
+- source_citation: The EXACT sentence(s) from the transcript (verbatim, no paraphrasing). Do NOT add quotes around it.
+- speaker: Who said it (look at the speaker label before the text, e.g. "**Sarah:**" or "Sarah (PM):")
+- type: feature | bug | improvement | tech_debt | nfr
+- granularity: epic | story | task
+- priority: critical | high | medium | low
+- priority_signals: urgency cues, deadlines mentioned
+- ambiguity_flags: anything unclear that needs clarification
+- confidence: high (explicitly stated) | medium (clearly implied) | low (loosely implied)
+
+## OUTPUT FORMAT:
+Return JSON: {"requirements": [{...}, {...}, ...]}
+
+Each requirement object:
 {
   "description": "string",
-  "source_citation": "exact quote from transcript",
-  "speaker": "Name (Role) or Unknown",
-  "type": "feature | bug | improvement | tech_debt | nfr",
-  "granularity": "epic | story | task",
-  "priority": "critical | high | medium | low",
+  "source_citation": "exact verbatim quote from transcript",
+  "speaker": "Name or Name (Role)",
+  "type": "feature|bug|improvement|tech_debt|nfr",
+  "granularity": "epic|story|task",
+  "priority": "critical|high|medium|low",
   "priority_signals": [{"signal": "string", "urgency": "low|medium|high|critical", "deadline": "string or null"}],
   "ambiguity_flags": [{"description": "string", "question": "string", "severity": "low|medium|high"}],
-  "confidence": "high | medium | low"
+  "confidence": "high|medium|low"
 }
 
-Return a JSON object with a single key "requirements" containing an array of requirement objects.
-Example: {"requirements": [{...}, {...}]}
-
-IMPORTANT: Err on the side of extracting more. When in doubt, extract with low confidence. Do NOT skip suggestions embedded in discussion.
+## CRITICAL RULES:
+- Extract MORE rather than fewer. A borderline requirement with low confidence is better than a missed one.
+- Each distinct actionable item = one separate requirement. Don't merge multiple asks into one.
+- source_citation must be VERBATIM from the transcript — not paraphrased, not summarized, no added quotes.
+- After extracting, count your requirements and verify each one is genuinely actionable.
 """
 
 client: OpenAI | None = None
@@ -211,8 +223,8 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "parser", "running", "Extracting requirements from transcript...")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     start = time.time()
     prompt_tokens = 0
@@ -234,7 +246,7 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
             try:
                 from tools.progress import update_progress
                 update_progress(meeting_id, "parser", "error", "Transcript is empty or too short.")
-            except Exception:
+            except Exception as e:
                 pass
             return {
                 "transcript": transcript,
@@ -265,8 +277,8 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
         try:
             from tools.progress import update_progress
             update_progress(meeting_id, "parser", "error", "")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
         return {
             "transcript": state.get("transcript", ""),
             "requirements": [],
@@ -301,8 +313,8 @@ async def parser_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "parser", "done", f"Extracted {len(requirements)} requirements")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     return {
         "transcript": transcript,

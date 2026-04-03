@@ -107,9 +107,9 @@ export default function AllStories() {
         meetingsApi.getById(storyData.meeting_id).then(mRes => {
           const meeting = mRes.data?.rows?.[0] || mRes.data;
           setStoryTranscript(meeting?.transcript);
-        }).catch(() => {});
+        }).catch((e) => console.warn('API error:', e));
       }
-    }).catch(() => {});
+    }).catch((e) => console.warn('API error:', e));
   };
 
   useEffect(() => {
@@ -169,7 +169,7 @@ export default function AllStories() {
       render: (type: string) => <Tag color={type === 'feature' ? 'blue' : type === 'bug' ? 'red' : type === 'nfr' ? 'purple' : type === 'improvement' ? 'green' : type === 'tech_debt' ? 'orange' : 'default'}>{type}</Tag>,
     },
     {
-      title: 'Criticality',
+      title: 'Crit.',
       dataIndex: 'priority',
       key: 'priority',
       width: 100,
@@ -215,7 +215,7 @@ export default function AllStories() {
       ),
     },
     {
-      title: 'Open Checks',
+      title: 'Checks',
       key: 'open_checks',
       width: 110,
       sorter: (a, b) => (a.open_checks || 0) - (b.open_checks || 0),

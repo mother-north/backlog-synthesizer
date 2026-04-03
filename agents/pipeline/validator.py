@@ -158,8 +158,8 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "validator", "running", f"Validating grounding for {len(candidate_stories)} stories...")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     start = time.time()
     validation_results: list[ValidationResult] = []
@@ -168,16 +168,16 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
         try:
             from tools.progress import update_progress
             update_progress(meeting_id, "validator", "done", "No stories to validate.")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
         # No stories — mark meeting as completed
         try:
             execute_write(
                 "UPDATE meetings SET status = 'completed' WHERE id = %s",
                 (meeting_id,),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
         return {"validation_results": [], "errors": errors}
 
     # Re-read transcript if not in state
@@ -302,8 +302,8 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "validator", "done", f"Validation complete: {valid_count} valid, {warning_count} warnings, {invalid_count} invalid")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     # Update meeting status to in_review
     try:
@@ -311,8 +311,8 @@ async def validator_agent(state: dict, config: dict | None = None) -> dict:
             "UPDATE meetings SET status = 'in_review' WHERE id = %s",
             (meeting_id,),
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     return {
         "candidate_stories": candidate_stories,

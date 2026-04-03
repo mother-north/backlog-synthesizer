@@ -56,7 +56,7 @@ export default function AccessLog() {
     [entries]
   );
   const uniqueIps = useMemo(() =>
-    [...new Set(entries.map(e => e.new_value?.ip).filter(Boolean))].sort().map(v => ({ text: v!, value: v! })),
+    [...new Set(entries.map(e => e.new_value?.ip?.replace(/:\d+$/, '')).filter(Boolean))].sort().map(v => ({ text: v!, value: v! })),
     [entries]
   );
 
@@ -85,9 +85,10 @@ export default function AccessLog() {
       key: 'ip',
       width: 140,
       filters: uniqueIps,
-      onFilter: (value, record) => record.new_value?.ip === value,
+      onFilter: (value, record) => record.new_value?.ip?.replace(/:\d+$/, '') === value,
       render: (_: unknown, record: LogEntry) => {
-        const ip = record.new_value?.ip;
+        let ip = record.new_value?.ip;
+        if (ip) ip = ip.replace(/:\d+$/, '');
         return ip ? <Text code style={{ fontSize: 12 }}>{ip}</Text> : '—';
       },
     },

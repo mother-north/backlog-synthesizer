@@ -97,8 +97,8 @@ async def retriever_agent(state: dict, config: dict | None = None) -> dict:
     try:
         from tools.progress import update_progress
         update_progress(meeting_id, "retriever", "running", f"Searching knowledge base for {len(requirements)} requirements...")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical error: %s", e)
 
     start = time.time()
     total_prompt_tokens = 0
@@ -257,8 +257,8 @@ async def retriever_agent(state: dict, config: dict | None = None) -> dict:
         try:
             from tools.progress import update_progress
             update_progress(meeting_id, "retriever", "done", f"Retrieved {total_items} context items for {len(requirements)} requirements")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
     return {
         "context": context,

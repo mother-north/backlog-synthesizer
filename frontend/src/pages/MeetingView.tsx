@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Tabs, Button, Tag, Skeleton, Table, Input, Timeline, App, Empty, Checkbox, Modal, Tooltip, Radio } from 'antd';
 import {
@@ -140,7 +141,7 @@ function ProcessingStatus({ meetingId, onComplete }: { meetingId: number; onComp
           clearInterval(timer);
           onComplete();
         }
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('Progress poll error:', e); }
     };
     poll();
     timer = setInterval(poll, 3000);
@@ -258,7 +259,7 @@ export default function MeetingView() {
     try {
       const res = await memosApi.getByMeeting(meetingId);
       setMemos(res.data?.rows || res.data || []);
-    } catch { /* empty */ }
+    } catch (e) { console.warn('Fetch error:', e); }
   };
 
   const fetchAudit = async () => {
@@ -269,7 +270,7 @@ export default function MeetingView() {
       ]);
       setTraces(tracesRes.data?.rows || tracesRes.data || []);
       setAuditLog(auditRes.data?.rows || auditRes.data || []);
-    } catch { /* empty */ }
+    } catch (e) { console.warn('Fetch error:', e); }
   };
 
   useEffect(() => {
@@ -531,10 +532,10 @@ export default function MeetingView() {
                   {meeting.transcript ? (
                     transcriptSearch ? (
                       <span dangerouslySetInnerHTML={{
-                        __html: meeting.transcript.replace(
+                        __html: DOMPurify.sanitize(meeting.transcript.replace(
                           new RegExp(`(${transcriptSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
                           '<mark style="background:#ffd591">$1</mark>'
-                        ),
+                        )),
                       }} />
                     ) : showStoryCitations && citationRanges.length > 0 ? (
                       (() => {
@@ -647,7 +648,7 @@ export default function MeetingView() {
                         render: (type: string) => <Tag color={type === 'feature' ? 'blue' : type === 'bug' ? 'red' : type === 'nfr' ? 'purple' : type === 'improvement' ? 'green' : 'default'}>{type}</Tag>,
                       },
                       {
-                        title: 'Criticality',
+                        title: 'Crit.',
                         dataIndex: 'priority',
                         key: 'priority',
                         width: 100,
@@ -684,7 +685,7 @@ export default function MeetingView() {
                         },
                       },
                       {
-                        title: 'Open Checks',
+                        title: 'Checks',
                         key: 'open_checks',
                         width: 110,
                         sorter: (a, b) => (a.checks?.filter((c: any) => c.status === 'open').length || 0) - (b.checks?.filter((c: any) => c.status === 'open').length || 0),
@@ -810,7 +811,7 @@ export default function MeetingView() {
                   <div className="bs-memo-content" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
                     <div
                       style={{ lineHeight: 1.8 }}
-                      dangerouslySetInnerHTML={{ __html: marked.parse(memos[0]?.content || '') as string }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(memos[0]?.content || '') as string) }}
                     />
                   </div>
                 )}

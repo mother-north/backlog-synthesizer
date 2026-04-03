@@ -11,7 +11,12 @@
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "start": "node backend/dist/index.js",
     "seed": "cd backend && npx tsx src/seed.ts",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test:backend && npm run test:frontend && npm run test:agents",
+    "test:backend": "npm run test --workspace=backend",
+    "test:frontend": "npm run test --workspace=frontend",
+    "test:agents": "cd agents && .venv/bin/python -m pytest tests/ -v",
+    "test:e2e": "npm run test:e2e --workspace=backend"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

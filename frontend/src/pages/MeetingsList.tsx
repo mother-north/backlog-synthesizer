@@ -129,7 +129,7 @@ export default function MeetingsList() {
       ),
     },
     {
-      title: 'Open Checks',
+      title: 'Checks',
       dataIndex: 'open_checks',
       key: 'open_checks',
       render: (count: number | undefined, record: any) =>
@@ -147,6 +147,7 @@ export default function MeetingsList() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <Radio.Group value={view} onChange={e => handleViewChange(e.target.value)} buttonStyle="solid" size="middle">
             <Radio.Button value="in_review">In Review ({meetings.filter(m => m.status === 'in_review' || m.status === 'processing').length})</Radio.Button>
+            <Radio.Button value="completed">Completed ({meetings.filter(m => m.status === 'completed').length})</Radio.Button>
             <Radio.Button value="uploaded">Uploaded ({meetings.filter(m => m.status === 'uploaded').length})</Radio.Button>
             <Radio.Button value="all">All ({meetings.length})</Radio.Button>
           </Radio.Group>
@@ -159,6 +160,7 @@ export default function MeetingsList() {
       {(() => {
         const filtered = meetings.filter(m => {
           if (view === 'in_review') return m.status === 'in_review' || m.status === 'processing';
+          if (view === 'completed') return m.status === 'completed';
           if (view === 'uploaded') return m.status === 'uploaded';
           return true;
         });

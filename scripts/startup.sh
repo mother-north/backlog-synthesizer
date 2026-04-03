@@ -38,14 +38,10 @@ fi
 
 NPM_BIN="$(dirname "$NODE_BIN")/npm"
 
-# 3. Install npm dependencies
-if [ ! -d "node_modules/express" ]; then
-  echo "Installing npm dependencies..."
-  "$NPM_BIN" install --omit=dev 2>&1 | tail -3
-  echo "npm dependencies installed"
-else
-  echo "npm dependencies OK"
-fi
+# 3. Install npm dependencies (always run to catch new packages)
+echo "Installing npm dependencies..."
+"$NPM_BIN" install --omit=dev 2>&1 | tail -3
+echo "npm dependencies OK"
 
 # 4. Start agents server (FastAPI) in background
 echo "Starting agents server on port 8000..."
