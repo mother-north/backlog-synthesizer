@@ -154,7 +154,7 @@ Existing Epics:
 """
 
     resp = _get_client().chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4-mini",
         messages=[
             {"role": "system", "content": SYNTHESIS_SYSTEM},
             {"role": "user", "content": user_content},

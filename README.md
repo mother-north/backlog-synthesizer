@@ -2,7 +2,7 @@
 
 Multi-agent system that transforms meeting transcripts into structured backlog items by cross-referencing against architecture docs and existing backlog.
 
-**Live:** [backlog-synthesizer.azurewebsites.net](https://backlog-synthesizer.azurewebsites.net)
+**Live:** [backlog-synthesizer-rde-495557106355.us-central1.run.app](https://backlog-synthesizer-rde-495557106355.us-central1.run.app)
 
 ## What It Does
 

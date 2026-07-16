@@ -54,7 +54,7 @@ def _filter_relevance(requirement_text: str, items: list[dict]) -> list[dict]:
     )
 
     resp = _get_client().chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4-mini",
         messages=[
             {"role": "system", "content": RELEVANCE_FILTER_SYSTEM},
             {

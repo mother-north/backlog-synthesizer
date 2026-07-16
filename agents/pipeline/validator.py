@@ -117,7 +117,7 @@ def _call_validator_llm(stories: list[CandidateStory], transcript: str) -> dict:
     t = transcript[:max_transcript] if len(transcript) > max_transcript else transcript
 
     resp = _get_client().chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4-mini",
         messages=[
             {"role": "system", "content": VALIDATOR_SYSTEM},
             {

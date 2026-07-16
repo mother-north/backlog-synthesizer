@@ -6,14 +6,20 @@
 # Region:         us-central1
 #
 # Usage:
-#   ./scripts/deploy-gcp.sh              # full deploy (infra + code)
-#   ./scripts/deploy-gcp.sh --code-only  # skip infra, redeploy code only
-#   ./scripts/deploy-gcp.sh --schema     # apply DB schema only
+#   ./scripts/deploy-gcp.sh                          # full deploy (infra + code)
+#   ./scripts/deploy-gcp.sh --code-only              # redeploy code only (~2 min, uses cached base)
+#   ./scripts/deploy-gcp.sh --build-base             # rebuild base image (deps only, ~7 min — run when requirements.txt/package.json changes)
+#   ./scripts/deploy-gcp.sh --schema                 # apply DB schema only
+#   ./scripts/deploy-gcp.sh --copy-data              # copy local DB → remote (skip conflicts)
+#   ./scripts/deploy-gcp.sh --copy-data --overwrite  # copy local DB → remote (truncate first)
+#
+# Typical workflow:
+#   First time or after deps change:  ./scripts/deploy-gcp.sh --build-base && ./scripts/deploy-gcp.sh --code-only
+#   After code changes only:          ./scripts/deploy-gcp.sh --code-only   (~2 min)
 #
 # Prerequisites:
-#   brew install google-cloud-sdk docker
+#   brew install google-cloud-sdk
 #   gcloud auth login
-#   gcloud auth configure-docker us-central1-docker.pkg.dev
 # =============================================================================
 
 set -e
@@ -48,9 +54,15 @@ echo ""
 # ─── Parse args ────────────────────────────────────────────────────────────────
 CODE_ONLY=false
 SCHEMA_ONLY=false
+COPY_DATA=false
+OVERWRITE=false
+BUILD_BASE=false
 for arg in "$@"; do
-  [[ "$arg" == "--code-only" ]] && CODE_ONLY=true
-  [[ "$arg" == "--schema"    ]] && SCHEMA_ONLY=true
+  [[ "$arg" == "--code-only"  ]] && CODE_ONLY=true
+  [[ "$arg" == "--schema"     ]] && SCHEMA_ONLY=true
+  [[ "$arg" == "--copy-data"  ]] && COPY_DATA=true
+  [[ "$arg" == "--overwrite"  ]] && OVERWRITE=true
+  [[ "$arg" == "--build-base" ]] && BUILD_BASE=true
 done
 
 # ─── 0. Prerequisites ──────────────────────────────────────────────────────────
@@ -107,6 +119,127 @@ if $SCHEMA_ONLY; then
   exit 0
 fi
 
+# ─── --copy-data ───────────────────────────────────────────────────────────────
+if $COPY_DATA; then
+  echo ""
+  if $OVERWRITE; then
+    echo -e "${YELLOW}[copy-data] Copying local DB → remote (OVERWRITE mode — remote data will be replaced)...${NC}"
+    echo -e "    ${RED}WARNING: All existing remote data will be deleted.${NC}"
+    read -r -p "    Continue? [y/N] " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+  else
+    echo -e "${YELLOW}[copy-data] Copying local DB → remote (skip conflicts)...${NC}"
+  fi
+
+  # Resolve tools
+  PG_BIN=$(command -v psql 2>/dev/null || ls /opt/homebrew/opt/postgresql@*/bin/psql 2>/dev/null | sort -V | tail -1 || echo "")
+  PGDUMP_BIN=$(command -v pg_dump 2>/dev/null || ls /opt/homebrew/opt/postgresql@*/bin/pg_dump 2>/dev/null | sort -V | tail -1 || echo "")
+  if [[ -z "$PG_BIN" || -z "$PGDUMP_BIN" ]]; then
+    echo -e "    ${RED}psql/pg_dump not found. Install: brew install postgresql${NC}"
+    exit 1
+  fi
+
+  # Read local DB config from .env
+  LOCAL_ENV="${PROJECT_DIR}/.env"
+  [[ ! -f "$LOCAL_ENV" ]] && LOCAL_ENV="${PROJECT_DIR}/backend/.env"
+  LOCAL_USER=$(grep "^PG_USER="     "$LOCAL_ENV" 2>/dev/null | cut -d= -f2-)
+  LOCAL_DB=$(grep   "^PG_DATABASE=" "$LOCAL_ENV" 2>/dev/null | cut -d= -f2-)
+  LOCAL_HOST=$(grep "^PG_HOST="     "$LOCAL_ENV" 2>/dev/null | cut -d= -f2-)
+  LOCAL_PORT=$(grep "^PG_PORT="     "$LOCAL_ENV" 2>/dev/null | cut -d= -f2-)
+  LOCAL_PASS=$(grep "^PG_PASSWORD=" "$LOCAL_ENV" 2>/dev/null | cut -d= -f2-)
+  LOCAL_USER="${LOCAL_USER:-$(whoami)}"
+  LOCAL_DB="${LOCAL_DB:-backlog_synthesizer_db}"
+  LOCAL_HOST="${LOCAL_HOST:-localhost}"
+  LOCAL_PORT="${LOCAL_PORT:-5432}"
+
+  echo -e "    ${CYAN}Local:  ${LOCAL_USER}@${LOCAL_HOST}:${LOCAL_PORT}/${LOCAL_DB}${NC}"
+
+  # Open remote firewall
+  DB_IP=$(gcloud sql instances describe "$DB_INSTANCE" \
+    --project="$PROJECT_ID" \
+    --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
+  if [[ -z "$DB_IP" ]]; then
+    echo -e "    ${RED}Could not find Cloud SQL instance: ${DB_INSTANCE}${NC}"; exit 1
+  fi
+  MY_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "")
+  if [[ -n "$MY_IP" ]]; then
+    gcloud sql instances patch "$DB_INSTANCE" \
+      --authorized-networks="${MY_IP}/32" \
+      --project="$PROJECT_ID" --quiet 2>/dev/null || true
+    echo -e "    ${CYAN}Firewall: allowed ${MY_IP}${NC}"
+    sleep 3
+  fi
+  echo -e "    ${CYAN}Remote: ${DB_USER}@${DB_IP}:5432/${DB_NAME}${NC}"
+
+  # Tables to copy (skip refresh_tokens — they are server-specific)
+  TABLES=(roles users meetings epics stories backlog_items checks decisions \
+          architecture_docs kb_embeddings memos menu_access agent_traces \
+          backlog_hygiene_flags audit_log)
+
+  DUMP_FILE=$(mktemp /tmp/bs_local_dump_XXXXXX.sql)
+  trap "rm -f '$DUMP_FILE'" EXIT
+
+  # Build dump header — TRUNCATE first in overwrite mode
+  if $OVERWRITE; then
+    # CASCADE handles FK ordering; tables listed in reverse-dependency order
+    printf "TRUNCATE TABLE %s RESTART IDENTITY CASCADE;\n" \
+      "$(IFS=,; echo "${TABLES[*]}")" > "$DUMP_FILE"
+  else
+    > "$DUMP_FILE"
+  fi
+
+  # --column-inserts: explicit column names in each INSERT — safe against
+  # schema column-order differences between local and remote.
+  # --on-conflict-do-nothing: skip rows that already exist (no-op after TRUNCATE).
+  # pg_dump respects FK dependency order, so parent tables are dumped first.
+  DUMP_ARGS=(--data-only --no-owner --no-privileges --column-inserts --on-conflict-do-nothing)
+  for tbl in "${TABLES[@]}"; do
+    DUMP_ARGS+=(-t "$tbl")
+  done
+
+  PGPASSWORD="$LOCAL_PASS" "$PGDUMP_BIN" \
+    -h "$LOCAL_HOST" -p "$LOCAL_PORT" -U "$LOCAL_USER" -d "$LOCAL_DB" \
+    "${DUMP_ARGS[@]}" >> "$DUMP_FILE" 2>/dev/null
+
+  # Count lines as a sanity check
+  LINE_COUNT=$(wc -l < "$DUMP_FILE")
+  echo -e "    ${CYAN}Dump size: ${LINE_COUNT} lines${NC}"
+
+  # Apply to remote
+  PGPASSWORD="$DB_PASSWORD" "$PG_BIN" \
+    "postgresql://${DB_USER}@${DB_IP}:5432/${DB_NAME}?sslmode=require" \
+    -f "$DUMP_FILE" -q 2>&1 | grep -v "^$" | grep -v "NOTICE" || true
+
+  echo -e "    ${GREEN}✓ Data copied to remote${NC}"
+
+  # Print remote row counts for verification
+  echo ""
+  echo -e "    ${CYAN}Remote row counts after copy:${NC}"
+  PGPASSWORD="$DB_PASSWORD" "$PG_BIN" \
+    "postgresql://${DB_USER}@${DB_IP}:5432/${DB_NAME}?sslmode=require" -t -A -c "
+    SELECT '  ' || rpad(tablename, 24) || COUNT(*)
+    FROM pg_tables
+    JOIN LATERAL (SELECT COUNT(*) FROM information_schema.columns WHERE 1=0) c(n) ON true
+    WHERE schemaname='public'
+    ORDER BY tablename;" 2>/dev/null || true
+
+  # Simpler approach for row counts
+  PGPASSWORD="$DB_PASSWORD" "$PG_BIN" \
+    "postgresql://${DB_USER}@${DB_IP}:5432/${DB_NAME}?sslmode=require" -t -A -c "
+SELECT '  ' || rpad(tablename::text, 26) ||
+       (SELECT COUNT(*)::text FROM information_schema.columns WHERE 1=0)
+FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" 2>/dev/null || true
+
+  for tbl in "${TABLES[@]}"; do
+    cnt=$(PGPASSWORD="$DB_PASSWORD" "$PG_BIN" \
+      "postgresql://${DB_USER}@${DB_IP}:5432/${DB_NAME}?sslmode=require" \
+      -t -A -c "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null || echo "?")
+    printf "    %-26s %s\n" "$tbl" "$cnt"
+  done
+
+  exit 0
+fi
+
 # ─── 1. Enable APIs ────────────────────────────────────────────────────────────
 if ! $CODE_ONLY; then
   echo ""
@@ -148,6 +281,7 @@ if ! $CODE_ONLY; then
     echo -e "    ${YELLOW}Creating Cloud SQL instance '${DB_INSTANCE}' (this takes ~5 min)...${NC}"
     gcloud sql instances create "$DB_INSTANCE" \
       --database-version=POSTGRES_16 \
+      --edition=enterprise \
       --tier=db-f1-micro \
       --region="$REGION" \
       --project="$PROJECT_ID" \
@@ -202,20 +336,37 @@ else
   echo -e "${CYAN}[2/7] Skipping infra (--code-only)${NC}"
 fi
 
-# ─── 3. Build Docker image ─────────────────────────────────────────────────────
+# ─── 3+4. Build & push image via Cloud Build ──────────────────────────────────
+BASE_IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/backlog-synthesizer-rde-base"
+
+if $BUILD_BASE; then
+  echo ""
+  echo -e "${YELLOW}[3/7] Building BASE image (deps only — ~7 min)...${NC}"
+  echo -e "    ${CYAN}Run this only when requirements.txt or package.json change.${NC}"
+  cd "$PROJECT_DIR"
+  gcloud builds submit \
+    --config="cloudbuild-base.yaml" \
+    --project="$PROJECT_ID" \
+    --substitutions="_PROJECT_ID=${PROJECT_ID}" \
+    . 2>&1
+  echo -e "    ${GREEN}✓ Base image built and pushed${NC}"
+  echo ""
+  echo -e "${CYAN}[4/7] Base image pushed. Now building code image...${NC}"
+fi
+
 echo ""
-echo -e "${YELLOW}[3/7] Building Docker image...${NC}"
+echo -e "${YELLOW}[3/7] Building code image with Cloud Build (~2 min)...${NC}"
 cd "$PROJECT_DIR"
 
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet 2>/dev/null
-docker build -t "${IMAGE}:latest" .
-echo -e "    ${GREEN}✓ Docker image built${NC}"
+gcloud builds submit \
+  --tag "${IMAGE}:latest" \
+  --project="$PROJECT_ID" \
+  --machine-type="e2-medium" \
+  . 2>&1
+echo -e "    ${GREEN}✓ Image built and pushed${NC}"
 
-# ─── 4. Push image ─────────────────────────────────────────────────────────────
 echo ""
-echo -e "${YELLOW}[4/7] Pushing image to Artifact Registry...${NC}"
-docker push "${IMAGE}:latest"
-echo -e "    ${GREEN}✓ Image pushed${NC}"
+echo -e "${CYAN}[4/7] Image pushed via Cloud Build${NC}"
 
 # ─── 5. Deploy to Cloud Run ────────────────────────────────────────────────────
 echo ""
@@ -258,7 +409,6 @@ gcloud run deploy "$SERVICE_NAME" \
   --add-cloudsql-instances="$DB_CONNECTION" \
   --set-env-vars="\
 NODE_ENV=production,\
-PORT=8080,\
 DATABASE_URL=${DATABASE_URL},\
 JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET},\
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET},\

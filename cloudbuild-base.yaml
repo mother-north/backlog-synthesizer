@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -f
+      - Dockerfile.base
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/backlog-synthesizer-rde/backlog-synthesizer-rde-base:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/backlog-synthesizer-rde/backlog-synthesizer-rde-base:latest
+options:
+  machineType: E2_HIGHCPU_8

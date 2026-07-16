@@ -100,7 +100,7 @@ Feature Tags: {json.dumps(story.get('feature_tags', []))}
 """
 
     resp = _get_client().chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4-mini",
         messages=[
             {"role": "system", "content": JUDGE_SYSTEM},
             {"role": "user", "content": user_content},

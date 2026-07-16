@@ -271,22 +271,37 @@ router.post('/:id/trigger', async (req: AuthRequest, res: Response) => {
       ]), meetingId]
     );
 
-    // Proxy to FastAPI agents
-    const agentsResponse = await fetch(`${config.agentsUrl}/pipeline/run/${meetingId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // Proxy to FastAPI agents — retry up to 90s to handle slow container startup
+    type FetchResp = Awaited<ReturnType<typeof fetch>>;
+    let agentsResponse: FetchResp | null = null;
+    const triggerUrl = `${config.agentsUrl}/pipeline/run/${meetingId}`;
+    const maxWaitMs = 90_000;
+    const startMs = Date.now();
+    while (true) {
+      try {
+        agentsResponse = await fetch(triggerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        break;
+      } catch (err: any) {
+        const isRefused = err?.cause?.code === 'ECONNREFUSED' || err?.code === 'ECONNREFUSED';
+        if (!isRefused || Date.now() - startMs >= maxWaitMs) throw err;
+        logger.info(`Agents not ready yet, retrying in 3s... (${Math.round((Date.now() - startMs) / 1000)}s elapsed)`);
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
 
-    if (!agentsResponse.ok) {
-      const errorBody = await agentsResponse.text();
-      logger.error(`Pipeline trigger failed: ${agentsResponse.status} ${errorBody}`);
-      return res.status(agentsResponse.status).json({
+    if (!agentsResponse!.ok) {
+      const errorBody = await agentsResponse!.text();
+      logger.error(`Pipeline trigger failed: ${agentsResponse!.status} ${errorBody}`);
+      return res.status(agentsResponse!.status).json({
         error: 'Pipeline trigger failed',
         details: errorBody,
       });
     }
 
-    const agentsData = await agentsResponse.json();
+    const agentsData = await agentsResponse!.json();
 
     // Write to audit log
     await query(

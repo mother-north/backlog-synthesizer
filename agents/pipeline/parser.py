@@ -97,13 +97,13 @@ def _get_client() -> OpenAI:
 async def _call_llm(transcript: str) -> dict:
     """Call GPT-4o to extract requirements."""
     resp = _get_client().chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4-mini",
         messages=[
             {"role": "system", "content": PARSER_SYSTEM},
             {"role": "user", "content": f"Meeting transcript:\n\n{transcript}"},
         ],
         temperature=0.1,
-        max_tokens=4096,
+        max_completion_tokens=4096,
         response_format={"type": "json_object"},
     )
     content = resp.choices[0].message.content or "[]"

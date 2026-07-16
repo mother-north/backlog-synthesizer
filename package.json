@@ -7,7 +7,7 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend,agents -c blue,green,yellow \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\" \"cd agents && python3.13 -m uvicorn main:app --reload --port 8000\"",
+    "dev": "concurrently -n backend,frontend,agents -c blue,green,yellow \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\" \"cd agents && .venv/bin/python -m uvicorn main:app --reload --port 8000\"",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "start": "node backend/dist/index.js",
     "seed": "cd backend && npx tsx src/seed.ts",
