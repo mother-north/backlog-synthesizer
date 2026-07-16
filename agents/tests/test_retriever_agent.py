@@ -80,23 +80,26 @@ async def test_retriever_agent_with_mocks():
     from pipeline.retriever import retriever_agent
 
     req = _make_requirement()
+    fake_embedding = [0.0] * 1536
 
     mock_kb = MagicMock()
     mock_kb.search_similar.return_value = []
+    mock_kb.search_similar_with_embedding.return_value = []
     mock_kb.search_decisions.return_value = []
     mock_kb.search_feedback.return_value = []
 
-    with patch('pipeline.retriever.KnowledgeBase', return_value=mock_kb):
-        with patch('pipeline.retriever.PgBacklogSource') as MockBacklog:
-            MockBacklog.return_value.search.return_value = []
-            with patch('pipeline.retriever.PgArchitectureSource') as MockArch:
-                MockArch.return_value.get_sections.return_value = []
-                with patch('pipeline.retriever.execute_write'):
-                    result = await retriever_agent({
-                        "meeting_id": 1,
-                        "requirements": [req],
-                        "errors": [],
-                    })
+    with patch('pipeline.retriever.embed_texts_batch', return_value=[fake_embedding]):
+        with patch('pipeline.retriever.KnowledgeBase', return_value=mock_kb):
+            with patch('pipeline.retriever.PgBacklogSource') as MockBacklog:
+                MockBacklog.return_value.search.return_value = []
+                with patch('pipeline.retriever.PgArchitectureSource') as MockArch:
+                    MockArch.return_value.get_sections.return_value = []
+                    with patch('pipeline.retriever.execute_write'):
+                        result = await retriever_agent({
+                            "meeting_id": 1,
+                            "requirements": [req],
+                            "errors": [],
+                        })
 
     assert "context" in result
     assert "requirements" in result

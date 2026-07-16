@@ -74,6 +74,17 @@ def embed_text(text: str) -> list[float]:
     return resp.data[0].embedding
 
 
+def embed_texts_batch(texts: list[str]) -> list[list[float]]:
+    """Batch-embed multiple texts in a single API call (much faster than N serial calls)."""
+    if not texts:
+        return []
+    resp = _get_openai().embeddings.create(
+        input=texts,
+        model=EMBEDDING_MODEL,
+    )
+    return [d.embedding for d in sorted(resp.data, key=lambda x: x.index)]
+
+
 def _vec_literal(vec: list[float]) -> str:
     """Format a vector as a pgvector literal string."""
     return "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
@@ -88,16 +99,13 @@ class KnowledgeBase:
 
     # ---- Read operations (Agent 2 / Retriever) ----
 
-    def search_similar(
+    def _pgvector_search(
         self,
-        query: str,
+        embedding: list[float],
         content_types: Optional[list[str]] = None,
         limit: int = 10,
     ) -> list[KBResult]:
-        """Semantic search via pgvector cosine similarity."""
-        query_emb = embed_text(query)
-        vec_str = _vec_literal(query_emb)
-
+        vec_str = _vec_literal(embedding)
         type_filter = ""
         params: dict = {"limit": limit}
         if content_types:
@@ -105,7 +113,6 @@ class KnowledgeBase:
             type_filter = f"AND content_type IN ({type_placeholders})"
             for i, ct in enumerate(content_types):
                 params[f"ct_{i}"] = ct
-
         rows = execute_query(
             f"""
             SELECT content_type, content_text, metadata,
@@ -117,17 +124,33 @@ class KnowledgeBase:
             """,
             {**params, "vec": vec_str},
         )
-        results = []
-        for r in rows:
-            results.append(
-                KBResult(
-                    content_type=r["content_type"],
-                    content_text=r["content_text"],
-                    similarity=float(r["similarity"]),
-                    metadata=r["metadata"] if isinstance(r["metadata"], dict) else {},
-                )
+        return [
+            KBResult(
+                content_type=r["content_type"],
+                content_text=r["content_text"],
+                similarity=float(r["similarity"]),
+                metadata=r["metadata"] if isinstance(r["metadata"], dict) else {},
             )
-        return results
+            for r in rows
+        ]
+
+    def search_similar_with_embedding(
+        self,
+        embedding: list[float],
+        content_types: Optional[list[str]] = None,
+        limit: int = 10,
+    ) -> list[KBResult]:
+        """Semantic search using a pre-computed embedding (avoids redundant API call)."""
+        return self._pgvector_search(embedding, content_types, limit)
+
+    def search_similar(
+        self,
+        query: str,
+        content_types: Optional[list[str]] = None,
+        limit: int = 10,
+    ) -> list[KBResult]:
+        """Semantic search via pgvector cosine similarity."""
+        return self._pgvector_search(embed_text(query), content_types, limit)
 
     def search_decisions(
         self,
