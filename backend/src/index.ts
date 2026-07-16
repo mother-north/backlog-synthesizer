@@ -203,8 +203,12 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // ── Start ───────────────────────────────────────────────────
 async function startServer() {
   try {
-    await initDatabase();
-    setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
+    try {
+      await initDatabase();
+      setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
+    } catch (dbError) {
+      logger.warn('Database unavailable at startup — server will start without DB. Configure PG_HOST to enable persistence.');
+    }
 
     // In production, agents server is started by scripts/startup.sh before Node.js
     if (config.nodeEnv === 'production') {
