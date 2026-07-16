@@ -121,6 +121,7 @@ Prior Context (decisions, feedback, related meetings):
             {"role": "user", "content": user_content},
         ],
         temperature=0.1,
+        max_completion_tokens=32768,
         response_format={"type": "json_object"},
     )
     content = resp.choices[0].message.content or "{}"

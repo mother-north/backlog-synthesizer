@@ -418,7 +418,11 @@ JWT_REFRESH_EXPIRY_REMEMBER=30d,\
 OPENAI_API_KEY=${LOCAL_OPENAI_KEY},\
 AGENTS_URL=http://localhost:8000,\
 ADMIN_EMAIL=admin@backlog-synthesizer.com,\
-ADMIN_PASSWORD=admin" \
+ADMIN_PASSWORD=admin,\
+PG_HOST=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE},\
+PG_DATABASE=${DB_NAME},\
+PG_USER=${DB_USER},\
+PG_PASSWORD=${DB_PASSWORD}" \
   --quiet
 
 echo -e "    ${GREEN}✓ Deployed to Cloud Run${NC}"

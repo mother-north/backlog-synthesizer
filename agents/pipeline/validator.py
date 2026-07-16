@@ -129,6 +129,7 @@ def _call_validator_llm(stories: list[CandidateStory], transcript: str) -> dict:
             },
         ],
         temperature=0.0,
+        max_completion_tokens=32768,
         response_format={"type": "json_object"},
     )
     content = resp.choices[0].message.content or "{}"

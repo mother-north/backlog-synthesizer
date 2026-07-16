@@ -103,7 +103,7 @@ async def _call_llm(transcript: str) -> dict:
             {"role": "user", "content": f"Meeting transcript:\n\n{transcript}"},
         ],
         temperature=0.1,
-        max_completion_tokens=4096,
+        max_completion_tokens=32768,
         response_format={"type": "json_object"},
     )
     content = resp.choices[0].message.content or "[]"
