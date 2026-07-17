@@ -133,3 +133,54 @@ class TestParseStories:
         }
         stories = _parse_stories(data, [])
         assert stories[0].priority == "critical"
+
+    def test_checks_attached_via_word_overlap(self):
+        """Checks whose story_title is a requirement description (not the story title)
+        should still attach via word overlap — this is the real-world crossref scenario
+        where crossref sets story_title=req.description and synthesizer generates a
+        different LLM title from the same requirement."""
+        checks = [
+            Check(
+                story_title="Move to MS SQL, urgently!",  # req.description used by crossref
+                check_type=CheckType.architecture,
+                details="Conflicts with PostgreSQL architecture",
+            ),
+        ]
+        data = {
+            "stories": [{
+                "title": "Migrate the system database from SQLite to MS SQL",  # LLM title
+                "description": "desc",
+                "type": "feature",
+                "confidence": "high",
+                "source_citation": "Move to MS SQL, urgently!",
+                "epic_id": "ERIS-005",
+            }],
+        }
+        stories = _parse_stories(data, checks)
+        arch_checks = [c for c in stories[0].checks if c.check_type == CheckType.architecture]
+        assert len(arch_checks) == 1, (
+            "Check should attach via word overlap on 'sql' even when story_title != story.title"
+        )
+
+    def test_checks_not_attached_to_unrelated_story(self):
+        """Checks should NOT attach to stories that share no words with the check's story_title."""
+        checks = [
+            Check(
+                story_title="Move to MS SQL, urgently!",
+                check_type=CheckType.architecture,
+                details="DB conflict",
+            ),
+        ]
+        data = {
+            "stories": [{
+                "title": "Add password reset via email",
+                "description": "desc",
+                "type": "feature",
+                "confidence": "high",
+                "source_citation": "q",
+                "epic_id": "ERIS-001",
+            }],
+        }
+        stories = _parse_stories(data, checks)
+        arch_checks = [c for c in stories[0].checks if c.check_type == CheckType.architecture]
+        assert len(arch_checks) == 0, "Unrelated story should not receive the check"

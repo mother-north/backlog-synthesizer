@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -197,11 +198,18 @@ def _parse_stories(data: dict, checks: list[Check], existing_epics: list[dict] |
                 ],
             )
 
-            # Attach relevant checks
+            # Attach relevant checks: substring match first, then word-overlap fallback.
+            # crossref uses req.description as story_title, which differs from the LLM-generated
+            # story title — so pure substring matching often fails.
+            def _tokenize(s: str) -> set[str]:
+                return {w for w in re.sub(r'[^\w\s]', '', s.lower()).split() if len(w) >= 3}
+
+            story_words = _tokenize(story.title)
             story_checks = [
                 c for c in checks
                 if c.story_title.lower() in story.title.lower()
                 or story.title.lower() in c.story_title.lower()
+                or bool(_tokenize(c.story_title) & story_words)
             ]
             story.checks = story_checks
 
